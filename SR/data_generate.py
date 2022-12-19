@@ -26,8 +26,9 @@ def generate_crop_image_set(input_folder, save_folder, crop_size=None, down_samp
         crop_size = [128, 128]
     crop_transforms = tfs.Compose([tfs.RandomCrop(crop_size)])
 
-    save_folder_high = os.path.join(save_folder, "\\high")
+    save_folder_high = save_folder + "\\high"
     save_folder_low = save_folder + "\\low"
+    print( save_folder_low )
     if not os.path.exists(save_folder_high):
         os.makedirs(save_folder_high)
     if not os.path.exists(save_folder_low):
@@ -35,7 +36,7 @@ def generate_crop_image_set(input_folder, save_folder, crop_size=None, down_samp
 
     count = 1
     folders = os.listdir(input_folder)
-
+    f_list = open(os.path.join(save_folder, "images_list.txt"), "w")
     print("开始转换文件")
     for _, f in tqdm(enumerate(folders), total=len(folders)):
         fp = input_folder + f
@@ -50,9 +51,13 @@ def generate_crop_image_set(input_folder, save_folder, crop_size=None, down_samp
             img_l = img_h.resize((int(crop_size[0] // down_sampling), int(crop_size[1] // down_sampling)))
             img_h.save(os.path.join(save_folder_high, file_name))
             img_l.save(os.path.join(save_folder_low, file_name))
+            f_list.write( file_name + "\n")
+            f_list.flush()
             count = count + 1
+
+    f_list.close()
 
 
 if __name__ == '__main__':
-    generate_crop_image_set(r"D:\project\Pycharm\1\coco128\coco128\images\train2017\\",
-                            r"D:\project\Pycharm\1\coco128\coco128\images\AAA", [256, 256])
+    generate_crop_image_set(r"D:\project\Pycharm\datas\coco128\coco128\images\train2017\\",
+                            r"D:\project\Pycharm\datas\coco128\coco128\images\AAA", [256, 256])

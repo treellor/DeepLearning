@@ -33,7 +33,7 @@ from torch.utils.data import DataLoader
 from torch.utils.data.dataset import Dataset
 from torchvision.transforms import Compose, RandomCrop, ToTensor, Resize, ToPILImage
 
-from SRCNN_data import DatasetFromFolder
+from SRCNN_data import DatasetFromFolder,DatasetHighLow
 from SRCNN_model import SRCNN
 
 
@@ -112,7 +112,11 @@ if __name__ == '__main__':
 
     imageForder = '../data/T91/'
     dataset = DatasetFromFolder(imageForder, Compose([RandomCrop([60, 60]), ToTensor()]))
-    train_set, val_set = torch.utils.data.random_split(dataset, [75, 16])
+    #dataset  = DatasetHighLow(r"D:\project\Pycharm\DeepLearning\data\coco125\high",  r"D:\project\Pycharm\DeepLearning\data\coco125\low")
+
+    len = dataset.__len__()
+
+    train_set, val_set = torch.utils.data.random_split(dataset, [len-16, 16])
     val_loader = DataLoader(dataset=val_set, num_workers=0, batch_size=8, shuffle=True)
     train_loader = DataLoader(dataset=train_set, num_workers=0, batch_size=16, shuffle=True)
     print(torch.cuda.is_available()  )

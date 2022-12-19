@@ -16,6 +16,7 @@ import os
 from torch.utils.data.dataset import Dataset
 from PIL import Image
 from torchvision.transforms import Compose, ToPILImage, ToTensor
+import torch
 
 
 def is_image_file(filename):
@@ -57,11 +58,11 @@ class DatasetFromFolder(Dataset):
         if img.mode != 'RGB':
             raise ValueError("Image:{} isn't RGB mode.".format(self.filePaths[item]))
 
-        #img, _cb, _cr = img.convert('YCbCr').split()
+        # img, _cb, _cr = img.convert('YCbCr').split()
         if self.transforms is not None:
             img = self.transforms(img)
 
-        result_image = img   #self.data_transform_Tensor(img)
+        result_image = img  # self.data_transform_Tensor(img)
 
         _, h, w = result_image.size()
 
@@ -72,14 +73,35 @@ class DatasetFromFolder(Dataset):
 
         return result_image, resize_image
 
-'''
-    @staticmethod
-    def collate_fn(batch):
-        # 官方实现的default_collate可以参考
-        # https://github.com/pytorch/pytorch/blob/67b7e751e6b5931a9f45274653f4f653a4e6cdf6/torch/utils/data/_utils/collate.py
-        images, labels = tuple(zip(*batch))
 
-        images = torch.stack(images, dim=0)
-        labels = torch.as_tensor(labels)
-        return images, labels
-'''
+class DatasetHighLow(Dataset):
+    def __init__(self, path_folder_high, path_folder_low):
+        super(DatasetHighLow, self).__init__()
+
+        self.data_transform_Tensor = Compose([ToTensor()])
+        self.filePathsHigh = []
+        self.filePathsLow = []
+        images_high = os.listdir(path_folder_high)
+        images_low = os.listdir(path_folder_low)
+        for f in images_high:
+            if f in images_low:
+                if is_image_file(path_folder_high + f):
+                    self.filePathsHigh.append(os.path.join(path_folder_high, f))
+                    self.filePathsLow.append(os.path.join(path_folder_low, f))
+
+    def __len__(self):
+        return len(self.filePathsHigh)
+
+    def __getitem__(self, item):
+        img1 = Image.open(self.filePathsHigh[item])
+        img2 = Image.open(self.filePathsLow[item])
+        image_high = self.data_transform_Tensor(img1)
+        image_low = self.data_transform_Tensor(img2)
+        return image_high, image_low
+
+
+if __name__ == '__main__':
+    datas = DatasetHighLow(r"D:\project\Pycharm\DeepLearning\data\coco125\high",
+                           r"D:\project\Pycharm\DeepLearning\data\coco125\low")
+
+
