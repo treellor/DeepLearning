@@ -1,3 +1,17 @@
+"""
+    Author		:  Treellor
+    Version		:  v1.0
+    Date		:  2021.12.19
+    Description	:
+            创建数据集程序
+    Others		:  //其他内容说明
+    History		:
+     1.Date:
+       Author:
+       Modification:
+     2.…………
+"""
+
 import os
 from torch.utils.data.dataset import Dataset
 from PIL import Image

@@ -1,3 +1,17 @@
+"""
+    Author		:  Treellor
+    Version		:  v1.0
+    Date		:  2021.12.19
+    Description	:
+            创建数据集程序
+    Others		:  //其他内容说明
+    History		:
+     1.Date:
+       Author:
+       Modification:
+     2.…………
+"""
+
 import os
 import tarfile
 import numpy as np
@@ -19,8 +33,8 @@ from torch.utils.data import DataLoader
 from torch.utils.data.dataset import Dataset
 from torchvision.transforms import Compose, RandomCrop, ToTensor, Resize, ToPILImage
 
-from ImageDataSet import DatasetFromFolder
-from SuperResolutionCNN import SuperResolutionCNN
+from SRCNN_data import DatasetFromFolder
+from SRCNN_model import SRCNN
 
 
 def psnr(label, outputs, max_val=1.):
@@ -103,7 +117,7 @@ if __name__ == '__main__':
     train_loader = DataLoader(dataset=train_set, num_workers=0, batch_size=16, shuffle=True)
     print(torch.cuda.is_available()  )
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    SRCNN = SuperResolutionCNN()
+    SRCNN = SRCNN()
     if torch.cuda.device_count() > 1:
         SRCNN = nn.DataParallel(SRCNN)
     SRCNN.to(device)
