@@ -11,22 +11,21 @@
        Modification:
      2.…………
 """
-
 import os
 from torch.utils.data.dataset import Dataset
 from PIL import Image
 from torchvision.transforms import Compose, ToPILImage, ToTensor
-import torch
+import torchvision.transforms as tfs
 
 
 def is_image_file(filename):
-    return any(filename.endswith(extension) for extension in ['bmp', '.png', '.jpg', '.jpeg', '.PNG', '.JPG', '.JPEG'])
+    return any(filename.endswith(extension) for extension in ['.bmp', '.png', '.jpg', '.jpeg', '.PNG', '.JPG', '.JPEG'])
 
 
 class DatasetFromFolder(Dataset):
-    def __init__(self, path, transforms=None, downsample=2):
+    def __init__(self, path, transforms=None, down_sampling=4):
         super(DatasetFromFolder, self).__init__()
-        self.downsample = downsample
+        self.down_sampling = down_sampling
         if transforms is None:
             self.transforms = Compose([ToTensor()])
         else:
@@ -62,12 +61,11 @@ class DatasetFromFolder(Dataset):
         if self.transforms is not None:
             img = self.transforms(img)
 
-        result_image = img  # self.data_transform_Tensor(img)
-
+        result_image = img
         _, h, w = result_image.size()
 
         resize_image = self.data_transform_PIL(result_image)
-        resize_image = resize_image.resize((int(w / self.downsample), int(h / self.downsample)))
+        resize_image = resize_image.resize((int(w / self.down_sampling), int(h / self.down_sampling)))
         resize_image = resize_image.resize((w, h), Image.Resampling.BICUBIC)
         resize_image = self.data_transform_Tensor(resize_image)
 
@@ -100,8 +98,42 @@ class DatasetHighLow(Dataset):
         return image_high, image_low
 
 
+import os
+from PIL import Image
+from torch.utils.data import Dataset
+import torchvision.transforms as tfs
+
+
+class SRGANDataset(Dataset):
+    def __init__(self, data_path, ty="train"):
+        self.dataset = []
+        self.path = data_path
+        self.ty = ty
+        f = open(os.path.join(data_path, "{}.txt".format(ty)))
+        self.dataset.extend(f.readlines())
+        f.close()
+        self.tfs = tfs.Compose([
+            tfs.ToTensor(),
+            tfs.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+        ])
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, index):
+        img_name = self.dataset[index].strip()
+        img = Image.open(os.path.join(self.path, self.ty, "img", img_name))
+        label = Image.open(os.path.join(self.path, self.ty, "label", img_name))
+        img = self.tfs(img)
+        label = self.tfs(label)
+        return img, label
+
+
 if __name__ == '__main__':
     datas = DatasetHighLow(r"D:\project\Pycharm\DeepLearning\data\coco125\high",
                            r"D:\project\Pycharm\DeepLearning\data\coco125\low")
-
-
+    '''
+        e = SRGANDataset(r"T:\srgan")
+    a, b = e[0]
+    print(a)
+    '''

@@ -18,7 +18,7 @@ from tqdm import tqdm
 
 
 def is_image_file(filename):
-    return any(filename.endswith(extension) for extension in ['bmp', '.png', '.jpg', '.jpeg', '.PNG', '.JPG', '.JPEG'])
+    return any(filename.endswith(extension) for extension in ['.bmp', '.png', '.jpg', '.jpeg', '.PNG', '.JPG', '.JPEG'])
 
 
 def generate_crop_image_set(input_folder, save_folder, crop_size=None, down_sampling=4):
