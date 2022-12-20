@@ -1,4 +1,16 @@
-# 参考论文  Photo-Realistic Single Image Super-Resolution Using a Generative Adversarial Network    2017
+"""
+    Author		:  Treellor
+    Version		:  v1.0
+    Date		:  2021.12.19
+    Description	:
+            参考论文  Photo-Realistic Single Image Super-Resolution Using a Generative Adversarial Network    2017
+    Others		:  //其他内容说明
+    History		:
+     1.Date:
+       Author:
+       Modification:
+     2.…………
+"""
 import torch
 import torch.nn as nn
 
