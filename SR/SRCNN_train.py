@@ -3,7 +3,7 @@
     Version		:  v1.0
     Date		:  2021.12.19
     Description	:
-            创建数据集程序
+            网络训练
     Others		:  //其他内容说明
     History		:
      1.Date:
@@ -13,7 +13,6 @@
 """
 
 import os
-import tarfile
 import numpy as np
 import math
 
@@ -23,16 +22,13 @@ from matplotlib import pyplot as plt
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import torch.nn.functional as F
 import torchvision
-from torch import no_grad
 from tqdm import tqdm
 
 from torch.utils.data import DataLoader
-from torch.utils.data.dataset import Dataset
 from torchvision.transforms import Compose, RandomCrop, ToTensor, Resize, ToPILImage
 
-from data_read import DatasetFromFolder, DatasetHighLow
+from data_read import DatasetFromFolder
 from SRCNN_model import SRCNN
 
 
@@ -116,8 +112,15 @@ if __name__ == '__main__':
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     SRCNN = SRCNN()
+
+    load_pretrained_models = False
+    # Load pretrained models
+    if load_pretrained_models:
+        SRCNN.load_state_dict(torch.load("./checkpoint/last_ckpt.pth"))
+
     if torch.cuda.device_count() > 1:
         SRCNN = nn.DataParallel(SRCNN)
+
     SRCNN.to(device)
 
     optimizer = optim.Adam(SRCNN.parameters())

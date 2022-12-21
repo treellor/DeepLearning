@@ -129,6 +129,47 @@ class SRGANDataset(Dataset):
         return img, label
 
 
+mean = np.array([0.485, 0.456, 0.406])
+std = np.array([0.229, 0.224, 0.225])
+
+
+class ImageDataset(Dataset):
+    def __init__(self, files, hr_shape):
+        hr_height, hr_width = hr_shape
+        # Transforms for low resolution images and high resolution images
+        self.lr_transform = tfs.Compose(
+            [
+                tfs.Resize((hr_height // 4, hr_height // 4), Image.BICUBIC),
+                tfs.ToTensor(),
+                tfs.Normalize(mean, std),
+            ]
+        )
+        self.hr_transform = tfs.Compose(
+            [
+                tfs.Resize((hr_height, hr_height), Image.BICUBIC),
+                tfs.ToTensor(),
+                tfs.Normalize(mean, std),
+            ]
+        )
+        self.files = files
+
+    def __getitem__(self, index):
+        img = Image.open(self.files[index % len(self.files)])
+        img_lr = self.lr_transform(img)
+        img_hr = self.hr_transform(img)
+
+        return {"lr": img_lr, "hr": img_hr}
+
+    def __len__(self):
+        return len(self.files)
+
+
+
+
+
+
+
+
 if __name__ == '__main__':
     datas = DatasetHighLow(r"D:\project\Pycharm\DeepLearning\data\coco125\high",
                            r"D:\project\Pycharm\DeepLearning\data\coco125\low")
