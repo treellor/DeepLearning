@@ -19,23 +19,23 @@ from torchvision.models import vgg19
 class FeatureExtractor(nn.Module):
     def __init__(self):
         super(FeatureExtractor, self).__init__()
-        vgg19_model = vgg19(pretrained=True) #读取与训练参数
-        # 采用vgg19网络前18层作为特征提取网络
+        vgg19_model = vgg19(weights=True)  # 读取与训练参数
         self.feature_extractor = nn.Sequential(*list(vgg19_model.features.children())[:18])
 
     def forward(self, img):
         return self.feature_extractor(img)
 
 
-class ResBlock(nn.Module):
+class ResidualBlock(nn.Module):
     """
     定义残差模块
     """
+
     def __init__(self, input_channel=64, output_channel=64, kernel_size=3, stride=1):
         super().__init__()
         self.layer = nn.Sequential(
             nn.Conv2d(input_channel, output_channel, kernel_size, stride, bias=False, padding=1),
-            nn.BatchNorm2d(output_channel),   # nn.BatchNorm2d(in_features, 0.8),
+            nn.BatchNorm2d(output_channel),  # nn.BatchNorm2d(in_features, 0.8),
             nn.PReLU(),
             nn.Conv2d(output_channel, output_channel, kernel_size, stride, bias=False, padding=1),
             nn.BatchNorm2d(output_channel)
@@ -44,9 +44,6 @@ class ResBlock(nn.Module):
     def forward(self, x0):
         x1 = self.layer(x0)
         return x0 + x1
-
-
-
 
 
 class GeneratorResNet(nn.Module):
@@ -62,17 +59,18 @@ class GeneratorResNet(nn.Module):
         # Residual blocks
         res_blocks = []
         for _ in range(n_residual_blocks):
-            res_blocks.append(ResBlock())
+            res_blocks.append(ResidualBlock(64, 64))
         self.res_blocks = nn.Sequential(*res_blocks)
 
         # Second conv layer post residual blocks
         self.conv2 = nn.Sequential(
             nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(64)  #nn.BatchNorm2d(64, 0.8)
+            nn.BatchNorm2d(64)  # nn.BatchNorm2d(64, 0.8)
         )
 
-        # Upsampling layers  4倍
-        self.upsampling4 = nn.Sequential(  # 上采样
+        # Upsampling layers 4倍上采样
+        # nn.Upsample(scale_factor=2),
+        self.upsampling4 = nn.Sequential(
             nn.Conv2d(64, 256, 3, stride=1, padding=1),
             nn.PixelShuffle(upscale_factor=2),
             nn.PReLU(),
@@ -97,13 +95,6 @@ class GeneratorResNet(nn.Module):
         return out
 
 
-
-
-'''
-定义判别模块
-'''
-
-
 class DiscriminatorBlock(nn.Module):
     def __init__(self, input_channel, output_channel, stride, kernel_size=3, padding=1):
         super().__init__()
@@ -118,10 +109,7 @@ class DiscriminatorBlock(nn.Module):
         return x
 
 
-class Discriminator(nn.Module):
-    """
-    定义判别器
-    """
+class DiscriminatorNet(nn.Module):
     def __init__(self):
         super().__init__()
         self.conv1 = nn.Sequential(
@@ -144,13 +132,11 @@ class Discriminator(nn.Module):
             nn.Conv2d(1024, 1, 1),
             nn.Sigmoid()
         )
-
     def forward(self, x):
         x = self.conv1(x)
         x = self.down(x)
         x = self.dense(x)
         return x
-
 
 
 '''
@@ -190,12 +176,10 @@ class Discriminator(nn.Module):
 
 '''
 
-
-
 if __name__ == '__main__':
-    # g = Generator()
+    g = GeneratorResNet()
     # a = torch.rand([1, 3, 64, 64])
     # print(g(a).shape)
-    d = Discriminator()
-    b = torch.rand([2, 3, 512, 512])
-    print(d(b).shape)
+    # d = Discriminator()
+    # b = torch.rand([2, 3, 512, 512])
+    # print(d(b).shape)

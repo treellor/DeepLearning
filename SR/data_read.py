@@ -12,7 +12,8 @@
      2.…………
 """
 import os
-from torch.utils.data.dataset import Dataset
+import numpy as np
+from torch.utils.data import Dataset
 from PIL import Image
 from torchvision.transforms import Compose, ToPILImage, ToTensor
 import torchvision.transforms as tfs
@@ -66,7 +67,7 @@ class DatasetFromFolder(Dataset):
 
         resize_image = self.data_transform_PIL(result_image)
         resize_image = resize_image.resize((int(w / self.down_sampling), int(h / self.down_sampling)))
-        resize_image = resize_image.resize((w, h), Image.Resampling.BICUBIC)
+        resize_image = resize_image.resize((w, h), Image.BICUBIC)
         resize_image = self.data_transform_Tensor(resize_image)
 
         return result_image, resize_image
@@ -95,13 +96,8 @@ class DatasetHighLow(Dataset):
         img2 = Image.open(self.filePathsLow[item])
         image_high = self.data_transform_Tensor(img1)
         image_low = self.data_transform_Tensor(img2)
-        return image_high, image_low
-
-
-import os
-from PIL import Image
-from torch.utils.data import Dataset
-import torchvision.transforms as tfs
+        return {"lr": image_low, "hr": image_high}
+        #return image_high, image_low
 
 
 class SRGANDataset(Dataset):
@@ -163,18 +159,40 @@ class ImageDataset(Dataset):
     def __len__(self):
         return len(self.files)
 
-
-
-
-
-
-
-
+import torch
+from torch.utils.data import DataLoader
+from SRGAN_models import GeneratorResNet, DiscriminatorNet, FeatureExtractor
+from torch.autograd import Variable
 if __name__ == '__main__':
     datas = DatasetHighLow(r"D:\project\Pycharm\DeepLearning\data\coco125\high",
                            r"D:\project\Pycharm\DeepLearning\data\coco125\low")
     '''
-        e = SRGANDataset(r"T:\srgan")
+        e = SRGANDataset(r"T:\\srgan")
     a, b = e[0]
     print(a)
     '''
+
+    dataset = DatasetHighLow(r"D:\project\Pycharm\DeepLearning\data\coco125\high",
+                             r"D:\project\Pycharm\DeepLearning\data\coco125\low")
+    train_set, val_set = torch.utils.data.random_split(dataset, [dataset.__len__() - 32, 32])
+    test_dataloader = DataLoader(dataset=val_set, num_workers=0, batch_size=16, shuffle=True)
+    train_dataloader = DataLoader(dataset=train_set, num_workers=0, batch_size=16, shuffle=True)
+
+    # Initialize generator and discriminator
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    cuda = torch.cuda.is_available()
+    Tensor = torch.cuda.FloatTensor if cuda else torch.Tensor
+
+    discriminator = DiscriminatorNet().to(device)
+    for  imgs in train_dataloader:
+
+            # Configure model input
+            imgs_lr = Variable(imgs["lr"].type(Tensor))
+            imgs_hr = Variable(imgs["hr"].type(Tensor))
+            # Adversarial ground truths
+            #A  = discriminator(imgs_hr)
+            #print(A)
+
+           # valid = Variable(Tensor(np.ones((imgs_lr.size(0), 1))), requires_grad=False)
+           # fake = Variable(Tensor(np.zeros((imgs_lr.size(0), *discriminator.output_shape))), requires_grad=False)
+

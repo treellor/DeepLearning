@@ -45,6 +45,9 @@ def generate_crop_image_set(input_folder, save_folder, crop_size=None, down_samp
             w, h = img.size
             if w < crop_size[0] or h < crop_size[1]:
                 continue
+            if img.mode != 'RGB':
+                continue
+            print(len(img.split()))
             t = os.path.splitext(fp)[-1]
             file_name = '{:0>8}'.format(count) + t
             img_h = crop_transforms(img)
@@ -61,3 +64,5 @@ def generate_crop_image_set(input_folder, save_folder, crop_size=None, down_samp
 if __name__ == '__main__':
     generate_crop_image_set(r"D:\project\Pycharm\datas\coco128\coco128\images\train2017\\",
                             r"D:\project\Pycharm\datas\coco128\coco128\images\AAA", [256, 256])
+
+
