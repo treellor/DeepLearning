@@ -1,9 +1,9 @@
 """
     Author		:  Treellor
     Version		:  v1.0
-    Date		:  2021.12.19
+    Date		:  2022.12.19
     Description	:
-            SRGAN 仿真模型
+            SRCNN 模型训练
     Others		:  //其他内容说明
     History		:
      1.Date:
@@ -160,11 +160,9 @@ def train(opt):
                         show_image_gen = srcnn(show_image_lr)
                         save_example_image(show_image_hr, show_image_lr, show_image_gen, folder_save_image, True)
                     else:
-                        if show_example:
-                            if epoch % 10 == 0:
-                                show_image_gen = srcnn(show_image_lr)
-                                save_example_image(show_image_hr, show_image_lr, show_image_gen, folder_save_image,
-                                                   True)
+                        if show_example and (epoch % 20 == 1):
+                            show_image_gen = srcnn(show_image_lr)
+                            save_example_image(show_image_hr, show_image_lr, show_image_gen, folder_save_image, True)
 
         val_epoch_loss = val_loss / len(val_loader.dataset)
         val_epoch_psnr = val_psnr / int(len(val_set) / val_loader.batch_size)
@@ -198,7 +196,7 @@ def train(opt):
 
 def parse_args():
     parser = argparse.ArgumentParser(description="You should add those parameter!")
-    parser.add_argument('--folder_data', type=str, default='data/coco128.yaml', help='dataset path')
+    parser.add_argument('--folder_data', type=str, default='data/T91', help='dataset path')
     parser.add_argument('--crop_img_w', type=int, default=64, help='randomly cropped image width')
     parser.add_argument('--crop_img_h', type=int, default=64, help='randomly cropped image height')
     parser.add_argument('--folder_save_image', type=str, default=r".\images\SRCNN", help='image save path')
@@ -214,6 +212,6 @@ def parse_args():
 
 if __name__ == '__main__':
     para = parse_args()
-    para.folder_data = '../data/T91/'
+    para.folder_data = '../data/T91'
     para.load_models = False
     train(para)

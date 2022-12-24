@@ -58,7 +58,7 @@ class ImageDatasetResize(Dataset):
                 if max_count is not None:
                     if count >= max_count:
                         break
-                self.filePaths.append(path + f)
+                self.filePaths.append(fp)
                 count = count + 1
 
     def __len__(self):
@@ -120,7 +120,7 @@ class ImageDatasetCrop(Dataset):
             if max_count is not None:
                 if count >= max_count:
                     break
-            self.filePaths.append(path + f)
+            self.filePaths.append(fp)
             count = count + 1
 
     def __len__(self):

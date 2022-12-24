@@ -132,6 +132,7 @@ class DiscriminatorNet(nn.Module):
             nn.Conv2d(1024, 1, 1),
             nn.Sigmoid()
         )
+
     def forward(self, x):
         x = self.conv1(x)
         x = self.down(x)
