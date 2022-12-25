@@ -206,7 +206,7 @@ def parse_args():
     parser.add_argument('--epochs', type=int, default=100, help='total training epochs')
     parser.add_argument('--batch_size', type=int, default=16, help='total batch size for all GPUs')
     parser.add_argument('--show_example', type=bool, default=True, help='show a validation example')
-    args = parser.parse_args()
+    args = parser.parse_args(args=[])
     return args
 
 
