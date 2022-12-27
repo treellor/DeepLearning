@@ -3,8 +3,8 @@
     Version		:  v1.0
     Date		:  2021.12.19
     Description	:
-            参考论文  Photo-Realistic Single Image Super-Resolution Using a Generative Adversarial Network    2017
-    Others		:  //其他内容说明
+    Reference	:
+        Photo-Realistic Single Image Super-Resolution Using a Generative Adversarial Network    2017
     History		:
      1.Date:
        Author:
@@ -13,13 +13,13 @@
 """
 import torch
 import torch.nn as nn
-from torchvision.models import vgg19
+from torchvision.models import vgg19, VGG19_Weights
 
 
 class FeatureExtractor(nn.Module):
     def __init__(self):
         super(FeatureExtractor, self).__init__()
-        vgg19_model = vgg19(weights=True)  # 读取与训练参数
+        vgg19_model = vgg19(weights=VGG19_Weights.DEFAULT)
         self.feature_extractor = nn.Sequential(*list(vgg19_model.features.children())[:18])
 
     def forward(self, img):
@@ -27,10 +27,6 @@ class FeatureExtractor(nn.Module):
 
 
 class ResidualBlock(nn.Module):
-    """
-    定义残差模块
-    """
-
     def __init__(self, input_channel=64, output_channel=64, kernel_size=3, stride=1):
         super().__init__()
         self.layer = nn.Sequential(

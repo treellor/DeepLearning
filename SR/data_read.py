@@ -1,10 +1,10 @@
 """
     Author		:  Treellor
     Version		:  v1.0
-    Date		:  2022.12.19
+    Date		:  2022.12.27
     Description	:
-            创建数据集程序
-    Others		:  //其他内容说明
+            read the dataset
+    Others		:
     History		:
      1.Date:
        Author:
@@ -12,7 +12,6 @@
      2.…………
 """
 import os
-# import numpy as np
 from torch.utils.data import Dataset
 from PIL import Image
 import torchvision.transforms as tfs
@@ -24,14 +23,20 @@ def is_image_file(filename):
 
 class ImageDatasetResize(Dataset):
     """
-    将原有数据集缩放到固定大小
+     scale the image to fix shape
     """
 
-    def __init__(self, path, resize_shape_hw=[128, 128], is_same_shape=False, down_sampling=4, is_Normalize=False,
-                 mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225], max_count=None):
+    def __init__(self, path, resize_shape_hw=None, is_same_shape=False, down_sampling=4, is_Normalize=False,
+                 mean=None, std=None, max_count=None):
 
         super(ImageDatasetResize, self).__init__()
 
+        if resize_shape_hw is None:
+            resize_shape_hw = [128, 128]
+        if std is None:
+            std = [0.229, 0.224, 0.225]
+        if mean is None:
+            mean = [0.485, 0.456, 0.406]
         hr_height, hr_width = resize_shape_hw
 
         hr_trans = [tfs.Resize((hr_height, hr_height), tfs.InterpolationMode.BICUBIC), tfs.ToTensor()]
@@ -79,14 +84,20 @@ class ImageDatasetResize(Dataset):
 
 class ImageDatasetCrop(Dataset):
     """
-    将原有数据集裁剪到固定大小
+    crop the images to fix shape
     """
 
-    def __init__(self, path, crop_shape_hw=[128, 128], is_same_shape=False, down_sampling=4, is_Normalize=False,
-                 mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225], max_count=None):
+    def __init__(self, path, crop_shape_hw=None, is_same_shape=False, down_sampling=4, is_Normalize=False,
+                 mean=None, std=None, max_count=None):
 
         super(ImageDatasetCrop, self).__init__()
 
+        if crop_shape_hw is None:
+            crop_shape_hw = [128, 128]
+        if std is None:
+            std = [0.229, 0.224, 0.225]
+        if mean is None:
+            mean = [0.485, 0.456, 0.406]
         self.is_save_shape = is_same_shape
         hr_height, hr_width = crop_shape_hw
         self.crop_transforms = tfs.Compose([tfs.RandomCrop((hr_height, hr_height), Image.BICUBIC)])
@@ -141,9 +152,13 @@ class ImageDatasetCrop(Dataset):
 
 class ImageDatasetHighLow(Dataset):
     def __init__(self, path_folder_high, path_folder_low,
-                 is_Normalize=False, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225], max_count=None):
+                 is_Normalize=False, mean=None, std=None, max_count=None):
         super(ImageDatasetHighLow, self).__init__()
 
+        if std is None:
+            std = [0.229, 0.224, 0.225]
+        if mean is None:
+            mean = [0.485, 0.456, 0.406]
         self.transforms_Tensor = tfs.Compose([tfs.ToTensor()])
         self.is_Normalize = is_Normalize
         if self.is_Normalize:
@@ -152,11 +167,17 @@ class ImageDatasetHighLow(Dataset):
         self.filePathsLow = []
         images_high = os.listdir(path_folder_high)
         images_low = os.listdir(path_folder_low)
+        count = 0
         for f in images_high:
             if f in images_low:
                 if is_image_file(path_folder_high + f):
-                    self.filePathsHigh.append(os.path.join(path_folder_high, f))
-                    self.filePathsLow.append(os.path.join(path_folder_low, f))
+                    if max_count is not None:
+                        if count >= max_count:
+                            break
+                    else:
+                        count = count + 1
+                        self.filePathsHigh.append(os.path.join(path_folder_high, f))
+                        self.filePathsLow.append(os.path.join(path_folder_low, f))
 
     def __len__(self):
         return len(self.filePathsHigh)
@@ -172,20 +193,6 @@ class ImageDatasetHighLow(Dataset):
         return {"lr": image_low, "hr": image_high}
 
 
-# import torch
-# from torch.utils.data import DataLoader
-
 if __name__ == '__main__':
-    """
     dataset = ImageDatasetHighLow(r"D:\project\Pycharm\DeepLearning\data\coco125\high",
-                             r"D:\project\Pycharm\DeepLearning\data\coco125\low", is_Normalize=True)
-    train_set, val_set = torch.utils.data.random_split(dataset, [dataset.__len__() - 32, 32])
-    test_dataloader = DataLoader(dataset=val_set, num_workers=0, batch_size=16, shuffle=True)
-    train_dataloader = DataLoader(dataset=train_set, num_workers=0, batch_size=16, shuffle=True)
-
-
-    for imgs in train_dataloader:
-        # Configure model input
-        imgs_lr = imgs["lr"]
-        imgs_hr = imgs["hr"]
-    """
+                                  r"D:\project\Pycharm\DeepLearning\data\coco125\low", is_Normalize=True)

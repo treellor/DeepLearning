@@ -17,7 +17,6 @@ import argparse
 
 import torch
 import torch.nn as nn
-# import torch.nn.functional as F
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
 from torchvision.utils import save_image, make_grid
@@ -29,10 +28,10 @@ from SRGAN_models import GeneratorResNet, DiscriminatorNet, FeatureExtractor
 
 
 def train(opt):
-    folder_save_image = opt.folder_save_image
-    folder_save_model = opt.folder_save_model
-    os.makedirs(folder_save_image, exist_ok=True)
-    os.makedirs(folder_save_model, exist_ok=True)
+    save_folder_image = os.path.join(opt.save_folder, r"SRGAN/images")
+    save_folder_model = os.path.join(opt.save_folder, r"SRGAN/models")
+    os.makedirs(save_folder_image, exist_ok=True)
+    os.makedirs(save_folder_model, exist_ok=True)
 
     dataset_high = os.path.join(opt.folder_data, r"high")
     dataset_low = os.path.join(opt.folder_data, r"low")
@@ -80,7 +79,8 @@ def train(opt):
     val_gen_losses, val_disc_losses = [], []
     # test_counter = [idx * len(train_dataloader.dataset) for idx in range(1, n_epochs + 1)]
     n_epochs = opt.epochs
-    scale_factor  =4
+    scale_factor = 4
+    save_epoch = max(int(n_epochs // opt.save_epoch_n), 1)
     for epoch in range(n_epochs):
         # Training
         generator.train()
@@ -172,61 +172,64 @@ def train(opt):
                 #  tqdm_bar.set_postfix(gen_loss=gen_loss / (batch_idx + 1), disc_loss=disc_loss / (batch_idx + 1))
 
                 # Save image grid with upsampled inputs and SRGAN outputs
-                if batch_idx == 0 :
-                    imgs_lr = nn.functional.interpolate(imgs_lr, scale_factor=scale_factor)
-                    imgs_hr = make_grid(imgs_hr, nrow=1, normalize=True)
-                    gen_hr = make_grid(gen_hr, nrow=1, normalize=True)
-                    imgs_lr = make_grid(imgs_lr, nrow=1, normalize=True)
-                    img_grid = torch.cat((imgs_hr, imgs_lr, gen_hr), -1)
-                    save_image(img_grid, f"images\\SRGAN\\{epoch}.png", normalize=False)
+                if batch_idx == 0:
+                    if (epoch == n_epochs - 1) or (epoch % save_epoch == 0):
+                        imgs_lr = nn.functional.interpolate(imgs_lr, scale_factor=scale_factor)
+                        imgs_hr = make_grid(imgs_hr, nrow=1, normalize=True)
+                        gen_hr = make_grid(gen_hr, nrow=1, normalize=True)
+                        imgs_lr = make_grid(imgs_lr, nrow=1, normalize=True)
+                        img_grid = torch.cat((imgs_hr, imgs_lr, gen_hr), -1)
+                        save_image(img_grid, os.path.join(save_folder_image, f"epoch_{epoch}.png"), normalize=False)
 
         val_gen_losses.append(gen_loss / len(test_dataloader))
         val_disc_losses.append(disc_loss / len(test_dataloader))
 
         # Save model checkpoints
-        if np.argmin(val_gen_losses) == len(val_gen_losses) - 1:
-            torch.save(generator.state_dict(), load_models_path_gen)
-            torch.save(discriminator.state_dict(), load_models_path_dis)
+        if (epoch == n_epochs - 1) or (epoch % save_epoch == 0):
+            torch.save(generator.state_dict(), os.path.join(save_folder_model, f"epoch_{epoch}_generator.pth"))
+            torch.save(discriminator.state_dict(), os.path.join(save_folder_model, f"epoch_{epoch}_discriminator.pth"))
 
     plt.figure(figsize=(10, 7))
-    plt.plot(train_gen_losses, color='orange', label='train gen losses')
+    plt.plot(train_gen_losses, color='blue', label='train gen losses')
     plt.plot(train_disc_losses, color='red', label='train disc losses')
     plt.xlabel('Epochs')
     plt.ylabel('Loss')
     plt.legend()
-    # plt.savefig('../output/loss.png')
+    plt.savefig(os.path.join(save_folder_image, 'train loss.png'))
     plt.show()
 
     plt.figure(figsize=(10, 7))
-    plt.plot(val_gen_losses, color='orange', label='Validate gen losses')
+    plt.plot(val_gen_losses, color='blue', label='Validate gen losses')
     plt.plot(val_disc_losses, color='red', label='Validate disc losses')
     plt.xlabel('Epochs')
     plt.ylabel('Loss')
     plt.legend()
-    # plt.savefig('../output/loss.png')
+    plt.savefig(os.path.join(save_folder_image, 'val loss.png'))
     plt.show()
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description="You should add those parameter!")
-    parser.add_argument('--folder_data', type=str, default='data\coco_sub', help='dataset path')
+    parser.add_argument('--folder_data', type=str, default='data/coco_sub', help='dataset path')
     parser.add_argument('--crop_img_w', type=int, default=128, help='randomly cropped image width')
     parser.add_argument('--crop_img_h', type=int, default=128, help='randomly cropped image height')
-    parser.add_argument('--folder_save_image', type=str, default=r".\images\SRGAN", help='image save path')
-    parser.add_argument('--folder_save_model', type=str, default=r".\models\SRGAN", help='model save path')
+    parser.add_argument('--save_folder', type=str, default=r"./working/", help='image save path')
     parser.add_argument('--load_models', type=bool, default=False, help='load pretrained model weight')
-    parser.add_argument('--load_models_path_gen', type=str, default=r".\models\SRGAN\discriminator.pth", help='load model path')
-    parser.add_argument('--load_models_path_dis', type=str, default=r".\models\SRGAN\generator.pth", help='load model path')
+    parser.add_argument('--load_models_path_gen', type=str, default=r"./working/SRGAN/models/discriminator.pth",
+                        help='load model path')
+    parser.add_argument('--load_models_path_dis', type=str, default=r"./working/SRGAN/models/generator.pth",
+                        help='load model path')
     parser.add_argument('--epochs', type=int, default=5, help='total training epochs')
+    parser.add_argument('--save_epoch_n', type=int, default=5, help='number of saved epochs')
     parser.add_argument('--batch_size', type=int, default=4, help='total batch size for all GPUs')
     parser.add_argument('--show_example', type=bool, default=True, help='show a validation example')
-    args = parser.parse_args(args=[])#不添加args=[] kaggle会报错
+    args = parser.parse_args(args=[])  # 不添加args=[] kaggle会报错
     return args
 
 
 if __name__ == '__main__':
     para = parse_args()
     para.folder_data = '../data/coco_sub'
-    para.load_models = True
-    para.epochs =10
+    para.load_models = False
+    para.epochs = 5
     train(para)
