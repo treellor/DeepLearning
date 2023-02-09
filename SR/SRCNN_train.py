@@ -31,9 +31,9 @@ from SRCNN_model import SRCNN
 
 def psnr(label, outputs, max_val=1.0):
     """
-        per_image_psnr = 10 * torch.log10(10 / per_image_mse_loss)
-        tensor_average_psnr = torch.mean(per_image_psnr).to(device)
-        loss = tensor_average_psnr
+        per_image_psnr = 20 * torch.log10(10 / per_image_mse_loss)
+
+
     """
     label = label.cpu().detach().numpy()
     outputs = outputs.cpu().detach().numpy()
@@ -70,7 +70,7 @@ def save_image(image_hr, image_lr, image_new, save_folder, epoch_num="Last", is_
     if is_show:
         img = Image.open(image_all_path)
         plt.imshow(img)
-        plt.title('H    L    Gen Image')
+        plt.title('   H                         L                     Gen Image')
         plt.show()
 
 
@@ -88,10 +88,11 @@ def train(opt):
     dataset = ImageDatasetCrop(data_folder, [img_h, img_w], is_same_shape=True)
 
     data_len = dataset.__len__()
-    val_data_len = int(data_len * 0.25)
+    val_data_len = int(data_len * 0.20)
+
     train_set, val_set = torch.utils.data.random_split(dataset, [data_len - val_data_len, val_data_len])
     train_loader = DataLoader(dataset=train_set, num_workers=0, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(dataset=val_set, num_workers=0, batch_size=int(batch_size // 2), shuffle=True)
+    val_loader = DataLoader(dataset=val_set, num_workers=0, batch_size=int(batch_size//2 ), shuffle=True)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     srcnn = SRCNN()
@@ -118,11 +119,12 @@ def train(opt):
     for epoch in tqdm(range(n_epochs)):
         train_loss = 0.0
         train_psnr = 0.0
+        train_time = 0
         srcnn.train()
         for images_hl in train_loader:
             LR = images_hl["lr"].to(device)
             HR = images_hl["hr"].to(device)
-
+            train_time +=1
             if epoch == 0 and show_image_hr is None:
                 show_image_hr = HR
                 show_image_lr = LR
@@ -137,18 +139,20 @@ def train(opt):
             train_psnr += psnr(HR, newHR)
 
         final_loss = train_loss / len(train_loader.dataset)
-        final_psnr = train_psnr / int(len(train_set) / train_loader.batch_size)
+        # final_psnr = train_psnr / int(len(train_set) / train_loader.batch_size)
+        final_psnr = train_psnr / train_time
         train_loss_all.append(final_loss)
         train_psnr_all.append(final_psnr)
 
         srcnn.eval()
         val_loss = 0.0
         val_psnr = 0.0
+        val_time =0
         with torch.no_grad():
             for idx, datas_hl in enumerate(val_loader):
                 image_l = datas_hl["lr"].to(device)
                 image_h = datas_hl["hr"].to(device)
-
+                val_time +=1
                 image_gen = srcnn(image_l)
                 val_loss_content = criterion(image_gen, image_h)
                 val_loss += val_loss_content.item()
@@ -164,7 +168,8 @@ def train(opt):
                         save_image(show_image_hr, show_image_lr, show_image_gen, save_folder_image, epoch, show_example)
 
         val_epoch_loss = val_loss / len(val_loader.dataset)
-        val_epoch_psnr = val_psnr / int(len(val_set) / val_loader.batch_size)
+        val_epoch_psnr = val_psnr / val_time
+        # val_epoch_psnr = val_psnr / int(len(val_set) / val_loader.batch_size)
         val_loss_all.append(val_epoch_loss)
         val_psnr_all.append(val_epoch_psnr)
 
@@ -173,7 +178,7 @@ def train(opt):
             torch.save(srcnn.state_dict(), os.path.join(save_folder_model, f"epoch_{epoch}_model.pth"))
 
     plt.figure(figsize=(10, 7))
-    plt.plot(train_loss_all, color='orange', label='train loss')
+    plt.plot(train_loss_all, color='green', label='train loss')
     plt.plot(val_loss_all, color='red', label='validation loss')
     plt.xlabel('Epochs')
     plt.ylabel('Loss')
@@ -183,7 +188,7 @@ def train(opt):
 
     plt.figure(figsize=(10, 7))
     plt.plot(train_psnr_all, color='green', label='train PSNR dB')
-    plt.plot(val_psnr_all, color='blue', label='validation PSNR dB')
+    plt.plot(val_psnr_all, color='red', label='validation PSNR dB')
     plt.xlabel('Epochs')
     plt.ylabel('PSNR (dB)')
     plt.legend()
@@ -211,5 +216,9 @@ if __name__ == '__main__':
 
     para = parse_args()
     para.folder_data = '../data/T91'
+    para.save_folder = r"./working/"
+    para.crop_img_w = 128
+    para.crop_img_h = 128
     para.load_models = True
+    para.load_models_path = r"./working/SRCNN/models/epoch_99_model.pth"
     train(para)
