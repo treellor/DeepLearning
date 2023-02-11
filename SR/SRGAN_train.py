@@ -27,6 +27,21 @@ from data_read import ImageDatasetHighLow
 from SRGAN_models import GeneratorResNet, DiscriminatorNet, FeatureExtractor
 
 
+def save_model(save_path, model, optimizer, epoch_n):
+    torch.save({"model_dict": model.state_dict(), "optimizer_dict": optimizer.state_dict(), "epoch_n": epoch_n},
+               save_path)
+    # print(model.state_dict()['Conv1.weight'])
+
+
+def load_model(save_path, model, optimizer):
+    model_data = torch.load(save_path)
+    model.load_state_dict(model_data["model_dict"])
+    optimizer.load_state_dict(model_data["optimizer_dict"])
+    epoch_n = model_data["epoch_n"]
+    return epoch_n
+    # print(model.state_dict()['Conv1.weight'])
+
+
 def train(opt):
     save_folder_image = os.path.join(opt.save_folder, r"SRGAN/images")
     save_folder_model = os.path.join(opt.save_folder, r"SRGAN/models")
@@ -48,21 +63,6 @@ def train(opt):
     generator = GeneratorResNet().to(device)
     discriminator = DiscriminatorNet().to(device)
 
-    load_models_path_gen = opt.load_models_path_gen
-    load_models_path_dis = opt.load_models_path_dis
-    # Load pretrained models
-    if opt.load_models:
-        generator.load_state_dict(torch.load(load_models_path_gen))
-        discriminator.load_state_dict(torch.load(load_models_path_dis))
-
-    # Set feature extractor to inference mode
-    feature_extractor = FeatureExtractor().to(device)
-    feature_extractor.eval()
-
-    # Losses
-    criterion_GAN = torch.nn.MSELoss().to(device)
-    criterion_content = torch.nn.L1Loss().to(device)
-
     # Optimizers
     # adam: learning rate
     lr = 0.00008
@@ -73,6 +73,22 @@ def train(opt):
     optimizer_G = torch.optim.Adam(generator.parameters(), lr=lr, betas=(b1, b2))
     optimizer_D = torch.optim.Adam(discriminator.parameters(), lr=lr, betas=(b1, b2))
 
+    load_models_path_gen = opt.load_models_path_gen
+    load_models_path_dis = opt.load_models_path_dis
+    # Load pretrained models
+    trained_epoch = 0
+    if opt.load_models:
+        trained_epoch = load_model(load_models_path_gen, generator, optimizer_G)
+        load_model(load_models_path_dis, discriminator, optimizer_D)
+
+    # Set feature extractor to inference mode
+    feature_extractor = FeatureExtractor().to(device)
+    feature_extractor.eval()
+
+    # Losses
+    criterion_GAN = torch.nn.MSELoss().to(device)
+    criterion_content = torch.nn.L1Loss().to(device)
+
     cuda = torch.cuda.is_available()
     Tensor = torch.cuda.FloatTensor if cuda else torch.Tensor
     train_gen_losses, train_disc_losses, train_counter = [], [], []
@@ -80,7 +96,7 @@ def train(opt):
     # test_counter = [idx * len(train_dataloader.dataset) for idx in range(1, n_epochs + 1)]
     n_epochs = opt.epochs
     scale_factor = 4
-    save_epoch = max(int(n_epochs // opt.save_epoch_n), 1)
+    save_epoch = opt.save_epoch or {n_epochs}
     for epoch in range(n_epochs):
         # Training
         generator.train()
@@ -173,21 +189,22 @@ def train(opt):
 
                 # Save image grid with upsampled inputs and SRGAN outputs
                 if batch_idx == 0:
-                    if (epoch == n_epochs - 1) or (epoch % save_epoch == 0):
+                    if epoch + 1 in save_epoch:
+                        current_epoch = epoch + 1+ trained_epoch
                         imgs_lr = nn.functional.interpolate(imgs_lr, scale_factor=scale_factor)
                         imgs_hr = make_grid(imgs_hr, nrow=1, normalize=True)
                         gen_hr = make_grid(gen_hr, nrow=1, normalize=True)
                         imgs_lr = make_grid(imgs_lr, nrow=1, normalize=True)
                         img_grid = torch.cat((imgs_hr, imgs_lr, gen_hr), -1)
-                        save_image(img_grid, os.path.join(save_folder_image, f"epoch_{epoch}.png"), normalize=False)
+                        save_image(img_grid, os.path.join(save_folder_image, f"epoch_{current_epoch}.png"), normalize=False)
+                        # Save model checkpoints
+                        save_model(os.path.join(save_folder_model, f"epoch_{current_epoch}_generator.pth"),
+                                   generator, optimizer_G, current_epoch)
+                        save_model(os.path.join(save_folder_model, f"epoch_{current_epoch}_discriminator.pth"),
+                                   discriminator, optimizer_D, current_epoch)
 
         val_gen_losses.append(gen_loss / len(test_dataloader))
         val_disc_losses.append(disc_loss / len(test_dataloader))
-
-        # Save model checkpoints
-        if (epoch == n_epochs - 1) or (epoch % save_epoch == 0):
-            torch.save(generator.state_dict(), os.path.join(save_folder_model, f"epoch_{epoch}_generator.pth"))
-            torch.save(discriminator.state_dict(), os.path.join(save_folder_model, f"epoch_{epoch}_discriminator.pth"))
 
     plt.figure(figsize=(10, 7))
     plt.plot(train_gen_losses, color='blue', label='train gen losses')
@@ -220,7 +237,7 @@ def parse_args():
     parser.add_argument('--load_models_path_dis', type=str, default=r"./working/SRGAN/models/generator.pth",
                         help='load model path')
     parser.add_argument('--epochs', type=int, default=5, help='total training epochs')
-    parser.add_argument('--save_epoch_n', type=int, default=5, help='number of saved epochs')
+    parser.add_argument('--save_epoch', type=set, default=set(), help='number of saved epochs')
     parser.add_argument('--batch_size', type=int, default=4, help='total batch size for all GPUs')
     parser.add_argument('--show_example', type=bool, default=True, help='show a validation example')
     args = parser.parse_args(args=[])  # 不添加args=[] kaggle会报错
@@ -230,6 +247,8 @@ def parse_args():
 if __name__ == '__main__':
     para = parse_args()
     para.folder_data = '../data/coco_sub'
-    para.load_models = False
+    para.load_models = True
+    para.load_models_path_gen = r"./working/SRGAN/models/epoch_5_generator.pth"
+    para.load_models_path_dis = r"./working/SRGAN/models/epoch_5_discriminator.pth"
     para.epochs = 5
     train(para)
