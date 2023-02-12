@@ -100,7 +100,7 @@ def train(opt):
     dataset = ImageDatasetCrop(data_folder, [img_h, img_w], is_same_shape=True, down_sampling=upsampling_n)
 
     data_len = dataset.__len__()
-    val_data_len = int(data_len * 0.20)
+    val_data_len = 16#int(data_len * 0.20)
 
     train_set, val_set = torch.utils.data.random_split(dataset, [data_len - val_data_len, val_data_len])
     train_loader = DataLoader(dataset=train_set, num_workers=0, batch_size=batch_size, shuffle=True)

@@ -248,6 +248,7 @@ if __name__ == '__main__':
     para = parse_args()
     para.folder_data = '../data/coco_sub'
     para.load_models = True
+    #para.save_epoch = set(range(1,10,1))
     para.load_models_path_gen = r"./working/SRGAN/models/epoch_110_generator.pth"
     para.load_models_path_dis = r"./working/SRGAN/models/epoch_110_discriminator.pth"
     para.epochs = 10
