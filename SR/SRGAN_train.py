@@ -59,8 +59,9 @@ def train(opt):
     train_dataloader = DataLoader(dataset=train_set, num_workers=0, batch_size=batch_size, shuffle=True)
 
     # Initialize generator and discriminator
+    upsampling_n = opt.upsampling_n
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    generator = GeneratorResNet().to(device)
+    generator = GeneratorResNet(n_upsampling=upsampling_n).to(device)
     discriminator = DiscriminatorNet().to(device)
 
     # Optimizers
@@ -73,9 +74,9 @@ def train(opt):
     optimizer_G = torch.optim.Adam(generator.parameters(), lr=lr, betas=(b1, b2))
     optimizer_D = torch.optim.Adam(discriminator.parameters(), lr=lr, betas=(b1, b2))
 
+    # Load pretrained models
     load_models_path_gen = opt.load_models_path_gen
     load_models_path_dis = opt.load_models_path_dis
-    # Load pretrained models
     trained_epoch = 0
     if opt.load_models:
         trained_epoch = load_model(load_models_path_gen, generator, optimizer_G)
@@ -89,13 +90,11 @@ def train(opt):
     criterion_GAN = torch.nn.MSELoss().to(device)
     criterion_content = torch.nn.L1Loss().to(device)
 
-    cuda = torch.cuda.is_available()
-    Tensor = torch.cuda.FloatTensor if cuda else torch.Tensor
+    Tensor = torch.cuda.FloatTensor if torch.cuda.is_available() else torch.Tensor
     train_gen_losses, train_disc_losses, train_counter = [], [], []
     val_gen_losses, val_disc_losses = [], []
     # test_counter = [idx * len(train_dataloader.dataset) for idx in range(1, n_epochs + 1)]
     n_epochs = opt.epochs
-    scale_factor = 4
     save_epoch = opt.save_epoch or {n_epochs}
     for epoch in range(n_epochs):
         # Training
@@ -191,7 +190,7 @@ def train(opt):
                 if batch_idx == 0:
                     if epoch + 1 in save_epoch:
                         current_epoch = epoch + 1+ trained_epoch
-                        imgs_lr = nn.functional.interpolate(imgs_lr, scale_factor=scale_factor)
+                        imgs_lr = nn.functional.interpolate(imgs_lr, scale_factor=upsampling_n)
                         imgs_hr = make_grid(imgs_hr, nrow=1, normalize=True)
                         gen_hr = make_grid(gen_hr, nrow=1, normalize=True)
                         imgs_lr = make_grid(imgs_lr, nrow=1, normalize=True)
@@ -230,6 +229,7 @@ def parse_args():
     parser.add_argument('--folder_data', type=str, default='data/coco_sub', help='dataset path')
     parser.add_argument('--crop_img_w', type=int, default=128, help='randomly cropped image width')
     parser.add_argument('--crop_img_h', type=int, default=128, help='randomly cropped image height')
+    parser.add_argument('--upsampling_n', type=int, default=4, help='the size of upsampling')
     parser.add_argument('--save_folder', type=str, default=r"./working/", help='image save path')
     parser.add_argument('--load_models', type=bool, default=False, help='load pretrained model weight')
     parser.add_argument('--load_models_path_gen', type=str, default=r"./working/SRGAN/models/discriminator.pth",
@@ -248,7 +248,7 @@ if __name__ == '__main__':
     para = parse_args()
     para.folder_data = '../data/coco_sub'
     para.load_models = True
-    para.load_models_path_gen = r"./working/SRGAN/models/epoch_5_generator.pth"
-    para.load_models_path_dis = r"./working/SRGAN/models/epoch_5_discriminator.pth"
-    para.epochs = 5
+    para.load_models_path_gen = r"./working/SRGAN/models/epoch_110_generator.pth"
+    para.load_models_path_dis = r"./working/SRGAN/models/epoch_110_discriminator.pth"
+    para.epochs = 10
     train(para)

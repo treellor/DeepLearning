@@ -95,9 +95,9 @@ def train(opt):
     batch_size = opt.batch_size
     img_h = opt.crop_img_h
     img_w = opt.crop_img_w
-    sampling_n = para.sampling_n
+    upsampling_n = para.upsampling_n
     # dataset = ImageDatasetResize(data_folder, [img_h, img_w], is_same_shape=True)
-    dataset = ImageDatasetCrop(data_folder, [img_h, img_w], is_same_shape=True, down_sampling=sampling_n)
+    dataset = ImageDatasetCrop(data_folder, [img_h, img_w], is_same_shape=True, down_sampling=upsampling_n)
 
     data_len = dataset.__len__()
     val_data_len = int(data_len * 0.20)
@@ -213,7 +213,7 @@ def parse_args():
     parser.add_argument('--folder_data', type=str, default='data/T91', help='dataset path')
     parser.add_argument('--crop_img_w', type=int, default=64, help='randomly cropped image width')
     parser.add_argument('--crop_img_h', type=int, default=64, help='randomly cropped image height')
-    parser.add_argument('--sampling_n', type=int, default=4, help='the size of Down-sampling')
+    parser.add_argument('--upsampling_n', type=int, default=4, help='the size of upsampling')
     parser.add_argument('--save_folder', type=str, default=r"./working/", help='image save path')
     parser.add_argument('--load_models', type=bool, default=False, help='load pretrained model weight')
     parser.add_argument('--load_models_path', type=str, default=r"./working/SRCNN/models/last_ckpt.pth",
@@ -232,7 +232,7 @@ if __name__ == '__main__':
     para.save_folder = r"./working/"
     para.crop_img_w = 128
     para.crop_img_h = 128
-    para.sampling_n = 4
+    para.upsampling_n = 4
     para.load_models = False
     para.load_models_path = r"./working/SRCNN/models/epoch_100_model.pth"
     train(para)

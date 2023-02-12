@@ -43,7 +43,7 @@ class ResidualBlock(nn.Module):
 
 
 class GeneratorResNet(nn.Module):
-    def __init__(self, in_channels=3, out_channels=3, n_residual_blocks=16):
+    def __init__(self, in_channels=3, out_channels=3, n_residual_blocks=16, n_upsampling=4):
         super(GeneratorResNet, self).__init__()
 
         # First layer
@@ -66,14 +66,21 @@ class GeneratorResNet(nn.Module):
 
         # Upsampling layers 4倍上采样
         # nn.Upsample(scale_factor=2),
-        self.upsampling4 = nn.Sequential(
-            nn.Conv2d(64, 256, 3, stride=1, padding=1),
-            nn.PixelShuffle(upscale_factor=2),
-            nn.PReLU(),
-            nn.Conv2d(64, 256, 3, stride=1, padding=1),
-            nn.PixelShuffle(upscale_factor=2),
-            nn.PReLU(),
-        )
+        if n_upsampling ==4:
+            self.upsampling = nn.Sequential(
+                nn.Conv2d(64, 256, 3, stride=1, padding=1),
+                nn.PixelShuffle(upscale_factor=2),
+                nn.PReLU(),
+                nn.Conv2d(64, 256, 3, stride=1, padding=1),
+                nn.PixelShuffle(upscale_factor=2),
+                nn.PReLU(),
+            )
+        else:
+            self.upsampling = nn.Sequential(
+                nn.Conv2d(64, 256, 3, stride=1, padding=1),
+                nn.PixelShuffle(upscale_factor=2),
+                nn.PReLU(),
+            )
 
         # Final output layer
         self.conv3 = nn.Sequential(
@@ -86,7 +93,7 @@ class GeneratorResNet(nn.Module):
         out = self.res_blocks(out1)
         out2 = self.conv2(out)
         out = torch.add(out1, out2)
-        out = self.upsampling4(out)
+        out = self.upsampling(out)
         out = self.conv3(out)
         return out
 
