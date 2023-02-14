@@ -93,9 +93,18 @@ def train(opt):
     Tensor = torch.cuda.FloatTensor if torch.cuda.is_available() else torch.Tensor
     train_gen_losses, train_disc_losses, train_counter = [], [], []
     val_gen_losses, val_disc_losses = [], []
-    # test_counter = [idx * len(train_dataloader.dataset) for idx in range(1, n_epochs + 1)]
+
     n_epochs = opt.epochs
-    save_epoch = opt.save_epoch or {n_epochs}
+    save_epoch = opt.save_epoch
+    save_epoch.add(n_epochs)
+    # 读取用去显示图像保存
+    show_data1 = dataset[0]
+    show_data2 = dataset[1]
+    show_data3 = dataset[2]
+    show_data4 = dataset[3]
+    show_image_hr = torch.stack([show_data1["hr"], show_data2["hr"], show_data3["hr"], show_data4["hr"]], 0).to(device)
+    show_image_lr = torch.stack([show_data1["lr"], show_data2["lr"], show_data3["lr"], show_data4["lr"]], 0).to(device)
+
     for epoch in range(n_epochs):
         # Training
         generator.train()
@@ -186,24 +195,27 @@ def train(opt):
                 disc_loss += loss_D.item()
                 #  tqdm_bar.set_postfix(gen_loss=gen_loss / (batch_idx + 1), disc_loss=disc_loss / (batch_idx + 1))
 
-                # Save image grid with upsampled inputs and SRGAN outputs
-                if batch_idx == 0:
-                    if epoch + 1 in save_epoch:
-                        current_epoch = epoch + 1+ trained_epoch
-                        imgs_lr = nn.functional.interpolate(imgs_lr, scale_factor=upsampling_n)
-                        imgs_hr = make_grid(imgs_hr, nrow=1, normalize=True)
-                        gen_hr = make_grid(gen_hr, nrow=1, normalize=True)
-                        imgs_lr = make_grid(imgs_lr, nrow=1, normalize=True)
-                        img_grid = torch.cat((imgs_hr, imgs_lr, gen_hr), -1)
-                        save_image(img_grid, os.path.join(save_folder_image, f"epoch_{current_epoch}.png"), normalize=False)
-                        # Save model checkpoints
-                        save_model(os.path.join(save_folder_model, f"epoch_{current_epoch}_generator.pth"),
-                                   generator, optimizer_G, current_epoch)
-                        save_model(os.path.join(save_folder_model, f"epoch_{current_epoch}_discriminator.pth"),
-                                   discriminator, optimizer_D, current_epoch)
-
         val_gen_losses.append(gen_loss / len(test_dataloader))
         val_disc_losses.append(disc_loss / len(test_dataloader))
+
+        # Save image grid with upsampled inputs and SRGAN outputs
+
+        if epoch + 1 in save_epoch:
+            current_epoch = epoch + 1 + trained_epoch
+            generator.eval()
+            gen_hr = generator(show_image_lr)
+            imgs_lr = nn.functional.interpolate(show_image_lr, scale_factor=upsampling_n)
+            imgs_lr = make_grid(imgs_lr, nrow=1, normalize=True)
+            imgs_hr = make_grid(show_image_hr, nrow=1, normalize=True)
+            gen_hr = make_grid(gen_hr, nrow=1, normalize=True)
+
+            img_grid = torch.cat((imgs_hr, imgs_lr, gen_hr), -1)
+            save_image(img_grid, os.path.join(save_folder_image, f"epoch_{current_epoch}.png"), normalize=False)
+            # Save model checkpoints
+            save_model(os.path.join(save_folder_model, f"epoch_{current_epoch}_generator.pth"),
+                       generator, optimizer_G, current_epoch)
+            save_model(os.path.join(save_folder_model, f"epoch_{current_epoch}_discriminator.pth"),
+                       discriminator, optimizer_D, current_epoch)
 
     plt.figure(figsize=(10, 7))
     plt.plot(train_gen_losses, color='blue', label='train gen losses')
@@ -247,9 +259,10 @@ def parse_args():
 if __name__ == '__main__':
     para = parse_args()
     para.folder_data = '../data/coco_sub'
-    para.load_models = True
-    #para.save_epoch = set(range(1,10,1))
-    para.load_models_path_gen = r"./working/SRGAN/models/epoch_110_generator.pth"
-    para.load_models_path_dis = r"./working/SRGAN/models/epoch_110_discriminator.pth"
+
     para.epochs = 10
+    para.save_epoch = set(range(1,10,5))
+    para.load_models = True
+    para.load_models_path_gen = r"./working/SRGAN/models/epoch_120_generator.pth"
+    para.load_models_path_dis = r"./working/SRGAN/models/epoch_120_discriminator.pth"
     train(para)

@@ -24,6 +24,7 @@ from PIL import Image
 from matplotlib import pyplot as plt
 from tqdm import tqdm
 from torch.utils.data import DataLoader
+from torchvision.utils import save_image, make_grid
 
 from data_read import ImageDatasetResize, ImageDatasetCrop
 from SRCNN_model import SRCNN
@@ -50,20 +51,21 @@ def save_image(image_hr, image_lr, image_new, save_folder, epoch_num="Last", is_
     image_gen_path = os.path.join(save_folder, f'Epoch_{epoch_num}_Gen.png')
     image_all_path = os.path.join(save_folder, f'Epoch_{epoch_num}_Image.png')
 
-    torchvision.utils.save_image(image_lr, image_lr_path)
-    torchvision.utils.save_image(image_hr, image_hr_path)
-    torchvision.utils.save_image(image_new, image_gen_path)
+    torchvision.utils.save_image(make_grid(image_lr, nrow=1, normalize=True), image_lr_path)
+    torchvision.utils.save_image(make_grid(image_hr, nrow=1, normalize=True), image_hr_path)
+    torchvision.utils.save_image(make_grid(image_new, nrow=1, normalize=True), image_gen_path)
 
     im1 = Image.open(image_hr_path)
     im2 = Image.open(image_lr_path)
     im3 = Image.open(image_gen_path)
 
-    _, _, h, w = image_hr.size()
-    dst = Image.new('RGB', (w * 3, h))
+    n, _, h, w = image_hr.size()
+    dst = Image.new('RGB', (w * 3, h*n))
     dst.paste(im1, (0, 0))
     dst.paste(im2, (w, 0))
     dst.paste(im3, (w * 2, 0))
     dst.save(image_all_path)
+
     if is_show:
         img = Image.open(image_all_path)
         plt.imshow(img)
@@ -72,7 +74,8 @@ def save_image(image_hr, image_lr, image_new, save_folder, epoch_num="Last", is_
 
 
 def save_model(save_path, model, optimizer, epoch_n):
-    torch.save({"model_dict": model.state_dict(), "optimizer_dict": optimizer.state_dict(), "epoch_n": epoch_n}, save_path)
+    torch.save({"model_dict": model.state_dict(), "optimizer_dict": optimizer.state_dict(), "epoch_n": epoch_n},
+               save_path)
     # print(model.state_dict()['Conv1.weight'])
 
 
@@ -99,15 +102,15 @@ def train(opt):
     # dataset = ImageDatasetResize(data_folder, [img_h, img_w], is_same_shape=True)
     dataset = ImageDatasetCrop(data_folder, [img_h, img_w], is_same_shape=True, down_sampling=upsampling_n)
 
+
     data_len = dataset.__len__()
-    val_data_len = 16#int(data_len * 0.20)
+    val_data_len = batch_size  # int(data_len * 0.20)
 
     train_set, val_set = torch.utils.data.random_split(dataset, [data_len - val_data_len, val_data_len])
     train_loader = DataLoader(dataset=train_set, num_workers=0, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(dataset=val_set, num_workers=0, batch_size=int(batch_size // 2), shuffle=True)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
     srcnn = SRCNN()
     # if torch.cuda.device_count() > 1:
     #    srcnn = nn.DataParallel(srcnn)
@@ -115,6 +118,7 @@ def train(opt):
     optimizer = optim.Adam(srcnn.parameters())
     criterion = nn.MSELoss().to(device)
 
+    #已经训练的 opoch数量
     trained_epoch = 0
     if opt.load_models:
         trained_epoch = load_model(opt.load_models_path, srcnn, optimizer)
@@ -124,11 +128,16 @@ def train(opt):
     train_psnr_all, val_psnr_all = [], []
 
     # 读取显示图像
-    show_image_hr = None
-    show_image_lr = None
-    n_epochs = opt.epochs
+    show_data1 = dataset[0]
+    show_data2 = dataset[1]
+    show_data3 = dataset[2]
+    show_data4 = dataset[3]
+    show_image_hr = torch.stack([show_data1["hr"], show_data2["hr"], show_data3["hr"], show_data4["hr"]], 0).to(device)
+    show_image_lr = torch.stack([show_data1["lr"], show_data2["lr"], show_data3["lr"], show_data4["lr"]], 0).to(device)
     # 强制保存最后一个epoch
-    save_epoch = opt.save_epoch or {n_epochs}
+    n_epochs = opt.epochs
+    save_epoch = opt.save_epoch
+    save_epoch.add(n_epochs)
 
     for epoch in tqdm(range(n_epochs)):
         train_loss = 0.0
@@ -139,9 +148,6 @@ def train(opt):
             LR = images_hl["lr"].to(device)
             HR = images_hl["hr"].to(device)
             train_time += 1
-            if epoch == 0 and show_image_hr is None:
-                show_image_hr = HR
-                show_image_lr = LR
 
             newHR = srcnn(LR)
             srcnn.zero_grad()
@@ -172,22 +178,20 @@ def train(opt):
                 val_loss += val_loss_content.item()
                 val_psnr += psnr(image_h, image_gen)
 
-                # show the last epoch
-                show_example = True if (epoch + 1 == n_epochs) else False
-                # save the testing
-                if idx == 0:
-                    if epoch + 1 in save_epoch:
-                        show_image_gen = srcnn(show_image_lr)
-                        save_image(show_image_hr, show_image_lr, show_image_gen, save_folder_image, epoch + 1 +trained_epoch,
-                                   show_example)
-                        # 保存最新的参数和损失最小的参数
-                        save_model(os.path.join(save_folder_model, f"epoch_{epoch + 1+trained_epoch}_model.pth"), srcnn, optimizer, epoch + 1+trained_epoch)
-
         val_epoch_loss = val_loss / len(val_loader.dataset)
         val_epoch_psnr = val_psnr / val_time
         # val_epoch_psnr = val_psnr / int(len(val_set) / val_loader.batch_size)
         val_loss_all.append(val_epoch_loss)
         val_psnr_all.append(val_epoch_psnr)
+
+        # # show the last epoch
+        show_example = True if (epoch + 1 == n_epochs) else False
+        if epoch + 1 in save_epoch:
+            srcnn.eval()
+            show_image_gen = srcnn(show_image_lr)
+            save_image(show_image_hr, show_image_lr, show_image_gen, save_folder_image, epoch + 1 + trained_epoch, show_example)
+            # 保存最新的参数和损失最小的参数
+            save_model(os.path.join(save_folder_model, f"epoch_{epoch + 1 + trained_epoch}_model.pth"), srcnn, optimizer, epoch + 1 + trained_epoch)
 
     plt.figure(figsize=(10, 7))
     plt.plot(train_loss_all, color='green', label='train loss')
@@ -233,6 +237,8 @@ if __name__ == '__main__':
     para.crop_img_w = 128
     para.crop_img_h = 128
     para.upsampling_n = 4
+    para.epochs = 100
+    para.save_epoch = set(range(1,100,20))
     para.load_models = False
     para.load_models_path = r"./working/SRCNN/models/epoch_100_model.pth"
     train(para)
