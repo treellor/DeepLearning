@@ -11,18 +11,19 @@
        Modification:
      2.…………
 """
-
 import torch
 import torch.nn as nn
 from torchvision.models.vgg import vgg19
-class ResidualDenseBlock(nn.Module):
-    def __init__(self, nf, gc=32, res_scale=0.2):
-        super(ResidualDenseBlock, self).__init__()
-        self.layer1 = nn.Sequential(nn.Conv2d(nf + 0 * gc, gc, 3, padding=1, bias=True), nn.LeakyReLU())
-        self.layer2 = nn.Sequential(nn.Conv2d(nf + 1 * gc, gc, 3, padding=1, bias=True), nn.LeakyReLU())
-        self.layer3 = nn.Sequential(nn.Conv2d(nf + 2 * gc, gc, 3, padding=1, bias=True), nn.LeakyReLU())
-        self.layer4 = nn.Sequential(nn.Conv2d(nf + 3 * gc, gc, 3, padding=1, bias=True), nn.LeakyReLU())
-        self.layer5 = nn.Sequential(nn.Conv2d(nf + 4 * gc, nf, 3, padding=1, bias=True), nn.LeakyReLU())
+
+
+class DenseBlock(nn.Module):
+    def __init__(self, in_channels, out_channels=32, res_scale=0.2):
+        super(DenseBlock, self).__init__()
+        self.layer1 = nn.Sequential(nn.Conv2d(in_channels + 0 * out_channels, out_channels, 3, padding=1, bias=True), nn.LeakyReLU())
+        self.layer2 = nn.Sequential(nn.Conv2d(in_channels + 1 * out_channels, out_channels, 3, padding=1, bias=True), nn.LeakyReLU())
+        self.layer3 = nn.Sequential(nn.Conv2d(in_channels + 2 * out_channels, out_channels, 3, padding=1, bias=True), nn.LeakyReLU())
+        self.layer4 = nn.Sequential(nn.Conv2d(in_channels + 3 * out_channels, out_channels, 3, padding=1, bias=True), nn.LeakyReLU())
+        self.layer5 = nn.Sequential(nn.Conv2d(in_channels + 4 * out_channels, in_channels, 3, padding=1, bias=True), nn.LeakyReLU())
 
         self.res_scale = res_scale
 
@@ -35,12 +36,12 @@ class ResidualDenseBlock(nn.Module):
         return layer5.mul(self.res_scale) + x
 
 
-class ResidualInResidualDenseBlock(nn.Module):
-    def __init__(self, nf, gc=32, res_scale=0.2):
-        super(ResidualInResidualDenseBlock, self).__init__()
-        self.layer1 = ResidualDenseBlock(nf, gc)
-        self.layer2 = ResidualDenseBlock(nf, gc)
-        self.layer3 = ResidualDenseBlock(nf, gc, )
+class ResidualDenseBlock(nn.Module):
+    def __init__(self, in_channels, out_channels=32, res_scale=0.2):
+        super(ResidualDenseBlock, self).__init__()
+        self.layer1 = DenseBlock(in_channels, out_channels,res_scale)
+        self.layer2 = DenseBlock(in_channels, out_channels,res_scale)
+        self.layer3 = DenseBlock(in_channels, out_channels,res_scale)
         self.res_scale = res_scale
 
     def forward(self, x):
@@ -50,11 +51,11 @@ class ResidualInResidualDenseBlock(nn.Module):
         return out.mul(self.res_scale) + x
 
 
-def upsample_block(nf, scale_factor=2):
+def upsample_block(in_channels, scale_factor=2):
     block = []
     for _ in range(scale_factor // 2):
         block += [
-            nn.Conv2d(nf, nf * (2 ** 2), 1),
+            nn.Conv2d(in_channels, in_channels * 4, 1),
             nn.PixelShuffle(2),
             nn.ReLU()
         ]
@@ -62,16 +63,16 @@ def upsample_block(nf, scale_factor=2):
     return nn.Sequential(*block)
 
 
-class ESRGAN(nn.Module):
+class GeneratorNet(nn.Module):
     def __init__(self, in_channels, out_channels, nf=64, gc=32, scale_factor=4, n_basic_block=23):
-        super(ESRGAN, self).__init__()
+        super(GeneratorNet, self).__init__()
 
         self.conv1 = nn.Sequential(nn.ReflectionPad2d(1), nn.Conv2d(in_channels, nf, 3), nn.ReLU())
 
         basic_block_layer = []
 
         for _ in range(n_basic_block):
-            basic_block_layer += [ResidualInResidualDenseBlock(nf, gc)]
+            basic_block_layer += [ResidualDenseBlock(nf, gc)]
 
         self.basic_block = nn.Sequential(*basic_block_layer)
 
