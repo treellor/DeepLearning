@@ -33,10 +33,11 @@ def save_model(save_path, model, optimizer, epoch_n):
     # print(model.state_dict()['Conv1.weight'])
 
 
-def load_model(save_path, model, optimizer):
+def load_model(save_path, model, optimizer=None):
     model_data = torch.load(save_path)
     model.load_state_dict(model_data["model_dict"])
-    optimizer.load_state_dict(model_data["optimizer_dict"])
+    if optimizer is not None:
+        optimizer.load_state_dict(model_data["optimizer_dict"])
     epoch_n = model_data["epoch_n"]
     return epoch_n
     # print(model.state_dict()['Conv1.weight'])
@@ -236,6 +237,38 @@ def train(opt):
     plt.show()
 
 
+def run(opt):
+    save_folder_image = os.path.join(opt.save_folder, r"SRGAN/results")
+    os.makedirs(save_folder_image, exist_ok=True)
+
+    dataset_high = os.path.join(opt.folder_data, r"high")
+    dataset_low = os.path.join(opt.folder_data, r"low")
+    dataset = ImageDatasetHighLow(dataset_high, dataset_low)
+    batch_size = opt.batch_size
+    result_dataloader = DataLoader(dataset=dataset, num_workers=0, batch_size=batch_size, shuffle=True)
+
+    # Initialize generator and discriminator
+    upsampling_n = opt.upsampling_n
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    generator = GeneratorResNet(n_upsampling=upsampling_n).to(device)
+    load_model(opt.load_models_path_gen, generator)
+
+    generator.eval()
+    for batch_idx, images_hl in tqdm(enumerate(result_dataloader), total=int(len(result_dataloader))):
+        # Configure model input
+        imgs_lr = images_hl["lr"].to(device)
+        imgs_hr = images_hl["hr"].to(device)
+        gen_hr = generator(imgs_lr)
+
+        imgs_lr = nn.functional.interpolate(imgs_lr, scale_factor=upsampling_n)
+        imgs_lr = make_grid(imgs_lr, nrow=1, normalize=True)
+        imgs_hr = make_grid(imgs_hr, nrow=1, normalize=True)
+        gen_hr = make_grid(gen_hr, nrow=1, normalize=True)
+
+        img_grid = torch.cat((imgs_hr, imgs_lr, gen_hr), -1)
+        save_image(img_grid, os.path.join(save_folder_image, f"picture_{batch_idx}.png"), normalize=False)
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description="You should add those parameter!")
     parser.add_argument('--folder_data', type=str, default='data/coco_sub', help='dataset path')
@@ -261,8 +294,9 @@ if __name__ == '__main__':
     para.folder_data = '../data/coco_sub'
 
     para.epochs = 10
-    para.save_epoch = set(range(1,10,5))
+   # para.save_epoch = set(range(1, 10, 5))
     para.load_models = True
-    para.load_models_path_gen = r"./working/SRGAN/models/epoch_120_generator.pth"
-    para.load_models_path_dis = r"./working/SRGAN/models/epoch_120_discriminator.pth"
-    train(para)
+    para.load_models_path_gen = r"./working/SRGAN/models/epoch_5850_generator.pth"
+    para.load_models_path_dis = r"./working/SRGAN/models/epoch_5850_discriminator.pth"
+    #train(para)
+    run(para)

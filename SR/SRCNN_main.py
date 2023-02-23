@@ -45,7 +45,7 @@ def psnr(label, outputs, max_val=1.0):
         return PNSR
 
 
-def save_image(image_hr, image_lr, image_new, save_folder, epoch_num="Last", is_show=False):
+def save_image_train(image_hr, image_lr, image_new, save_folder, epoch_num="Last", is_show=False):
     image_lr_path = os.path.join(save_folder, f'Epoch_{epoch_num}_LR.png')
     image_hr_path = os.path.join(save_folder, f'Epoch_{epoch_num}_HR.png')
     image_gen_path = os.path.join(save_folder, f'Epoch_{epoch_num}_Gen.png')
@@ -60,7 +60,7 @@ def save_image(image_hr, image_lr, image_new, save_folder, epoch_num="Last", is_
     im3 = Image.open(image_gen_path)
 
     n, _, h, w = image_hr.size()
-    dst = Image.new('RGB', (w * 3, h*n))
+    dst = Image.new('RGB', (w * 3, h * n))
     dst.paste(im1, (0, 0))
     dst.paste(im2, (w, 0))
     dst.paste(im3, (w * 2, 0))
@@ -79,10 +79,11 @@ def save_model(save_path, model, optimizer, epoch_n):
     # print(model.state_dict()['Conv1.weight'])
 
 
-def load_model(save_path, model, optimizer):
+def load_model(save_path, model, optimizer=None):
     model_data = torch.load(save_path)
     model.load_state_dict(model_data["model_dict"])
-    optimizer.load_state_dict(model_data["optimizer_dict"])
+    if optimizer is not None:
+        optimizer.load_state_dict(model_data["optimizer_dict"])
     epoch_n = model_data["epoch_n"]
     return epoch_n
     # print(model.state_dict()['Conv1.weight'])
@@ -102,7 +103,6 @@ def train(opt):
     # dataset = ImageDatasetResize(data_folder, [img_h, img_w], is_same_shape=True)
     dataset = ImageDatasetCrop(data_folder, [img_h, img_w], is_same_shape=True, down_sampling=upsampling_n)
 
-
     data_len = dataset.__len__()
     val_data_len = batch_size  # int(data_len * 0.20)
 
@@ -118,7 +118,7 @@ def train(opt):
     optimizer = optim.Adam(srcnn.parameters())
     criterion = nn.MSELoss().to(device)
 
-    #已经训练的 opoch数量
+    # 已经训练的 opoch数量
     trained_epoch = 0
     if opt.load_models:
         trained_epoch = load_model(opt.load_models_path, srcnn, optimizer)
@@ -189,9 +189,11 @@ def train(opt):
         if epoch + 1 in save_epoch:
             srcnn.eval()
             show_image_gen = srcnn(show_image_lr)
-            save_image(show_image_hr, show_image_lr, show_image_gen, save_folder_image, epoch + 1 + trained_epoch, show_example)
+            save_image_train(show_image_hr, show_image_lr, show_image_gen, save_folder_image, epoch + 1 + trained_epoch,
+                       show_example)
             # 保存最新的参数和损失最小的参数
-            save_model(os.path.join(save_folder_model, f"epoch_{epoch + 1 + trained_epoch}_model.pth"), srcnn, optimizer, epoch + 1 + trained_epoch)
+            save_model(os.path.join(save_folder_model, f"epoch_{epoch + 1 + trained_epoch}_model.pth"), srcnn,
+                       optimizer, epoch + 1 + trained_epoch)
 
     plt.figure(figsize=(10, 7))
     plt.plot(train_loss_all, color='green', label='train loss')
@@ -210,6 +212,35 @@ def train(opt):
     plt.legend()
     plt.savefig(os.path.join(save_folder_image, r"psnr.png"))
     plt.show()
+
+
+def run(opt):
+    save_folder_result = os.path.join(opt.save_folder, r"SRCNN/results")
+    os.makedirs(save_folder_result, exist_ok=True)
+
+    data_folder = opt.folder_data
+    batch_size = opt.batch_size
+    img_h = opt.crop_img_h
+    img_w = opt.crop_img_w
+    upsampling_n = para.upsampling_n
+    dataset = ImageDatasetCrop(data_folder, [img_h, img_w], is_same_shape=True, down_sampling=upsampling_n)
+
+    result_loader = DataLoader(dataset=dataset, num_workers=0, batch_size=batch_size, shuffle=False)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    srcnn = SRCNN()
+    srcnn.to(device)
+    load_model(opt.load_models_path, srcnn)
+    srcnn.eval()
+    for idx, datas_hl in tqdm(enumerate(result_loader),  total=int(len(result_loader))):
+        image_l = datas_hl["lr"].to(device)
+        image_h = datas_hl["hr"].to(device)
+        image_gen = srcnn(image_l)
+        imgs_lr = make_grid(image_l, nrow=1, normalize=True)
+        imgs_hr = make_grid(image_h, nrow=1, normalize=True)
+        gen_hr = make_grid(image_gen, nrow=1, normalize=True)
+        img_grid = torch.cat((imgs_hr, imgs_lr, gen_hr), -1)
+        save_image(img_grid, os.path.join(save_folder_result, f'picture_{idx}_Image.png'), normalize=False)
+
 
 
 def parse_args():
@@ -234,11 +265,12 @@ if __name__ == '__main__':
     para = parse_args()
     para.folder_data = '../data/T91'
     para.save_folder = r"./working/"
-    para.crop_img_w = 128
-    para.crop_img_h = 128
+    para.crop_img_w = 160
+    para.crop_img_h = 160
     para.upsampling_n = 4
     para.epochs = 100
-    para.save_epoch = set(range(1,100,20))
-    para.load_models = False
-    para.load_models_path = r"./working/SRCNN/models/epoch_100_model.pth"
-    train(para)
+    #para.save_epoch = set(range(1, 100, 20))
+    para.load_models = True
+    para.load_models_path = r"./working/SRCNN/models/epoch_200_model.pth"
+    #train(para)
+    run(para)
