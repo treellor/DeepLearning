@@ -90,11 +90,12 @@ def load_model(save_path, model, optimizer=None):
 
 
 def train(opt):
+    # 创建文件夹
     save_folder_image = os.path.join(opt.save_folder, r"SRCNN/images")
     save_folder_model = os.path.join(opt.save_folder, r"SRCNN/models")
     os.makedirs(save_folder_image, exist_ok=True)
     os.makedirs(save_folder_model, exist_ok=True)
-
+    #读取数据
     data_folder = opt.folder_data
     batch_size = opt.batch_size
     img_h = opt.crop_img_h
@@ -110,6 +111,7 @@ def train(opt):
     train_loader = DataLoader(dataset=train_set, num_workers=0, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(dataset=val_set, num_workers=0, batch_size=int(batch_size // 2), shuffle=True)
 
+    # 建立模型
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     srcnn = SRCNN()
     # if torch.cuda.device_count() > 1:
@@ -270,7 +272,7 @@ if __name__ == '__main__':
     para.upsampling_n = 4
     para.epochs = 100
     #para.save_epoch = set(range(1, 100, 20))
-    para.load_models = True
+    para.load_models = False
     para.load_models_path = r"./working/SRCNN/models/epoch_200_model.pth"
-    #train(para)
-    run(para)
+    train(para)
+    #run(para)

@@ -298,5 +298,5 @@ if __name__ == '__main__':
     para.load_models = True
     para.load_models_path_gen = r"./working/SRGAN/models/epoch_5850_generator.pth"
     para.load_models_path_dis = r"./working/SRGAN/models/epoch_5850_discriminator.pth"
-    #train(para)
-    run(para)
+    train(para)
+    #run(para)

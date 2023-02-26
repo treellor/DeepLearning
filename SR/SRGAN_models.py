@@ -65,22 +65,16 @@ class GeneratorResNet(nn.Module):
         )
 
         # Upsampling layers 4倍上采样
-        # nn.Upsample(scale_factor=2),
-        if n_upsampling ==4:
-            self.upsampling = nn.Sequential(
+        block = []
+        for _ in range(n_upsampling // 2):
+            block += [
                 nn.Conv2d(64, 256, 3, stride=1, padding=1),
                 nn.PixelShuffle(upscale_factor=2),
-                nn.PReLU(),
-                nn.Conv2d(64, 256, 3, stride=1, padding=1),
-                nn.PixelShuffle(upscale_factor=2),
-                nn.PReLU(),
-            )
-        else:
-            self.upsampling = nn.Sequential(
-                nn.Conv2d(64, 256, 3, stride=1, padding=1),
-                nn.PixelShuffle(upscale_factor=2),
-                nn.PReLU(),
-            )
+                nn.PReLU()
+            ]
+
+        self.upsampling = nn.Sequential(*block)
+
 
         # Final output layer
         self.conv3 = nn.Sequential(
@@ -99,7 +93,7 @@ class GeneratorResNet(nn.Module):
 
 
 class DiscriminatorBlock(nn.Module):
-    def __init__(self, input_channel, output_channel, stride, kernel_size=3, padding=1):
+    def __init__(self, input_channel, output_channel, stride=1, kernel_size=3, padding=1):
         super().__init__()
         self.layer = nn.Sequential(
             nn.Conv2d(input_channel, output_channel, kernel_size, stride, padding),

@@ -13,8 +13,7 @@
 """
 import torch
 import torch.nn as nn
-from torchvision.models.vgg import vgg19
-
+from torchvision.models import vgg19, VGG19_Weights
 
 class DenseBlock(nn.Module):
     def __init__(self, in_channels, out_channels=32, res_scale=0.2):
@@ -59,7 +58,6 @@ def upsample_block(in_channels, scale_factor=2):
             nn.PixelShuffle(2),
             nn.ReLU()
         ]
-
     return nn.Sequential(*block)
 
 
@@ -91,55 +89,59 @@ class GeneratorNet(nn.Module):
         return x
 
 
-class Discriminator(nn.Module):
-    def __init__(self, num_conv_block=4):
-        super(Discriminator, self).__init__()
-
-        block = []
-
-        in_channels = 3
-        out_channels = 64
-
-        for _ in range(num_conv_block):
-            block += [nn.ReflectionPad2d(1),
-                      nn.Conv2d(in_channels, out_channels, 3),
-                      nn.LeakyReLU(),
-                      nn.BatchNorm2d(out_channels)]
-            in_channels = out_channels
-
-            block += [nn.ReflectionPad2d(1),
-                      nn.Conv2d(in_channels, out_channels, 3, 2),
-                      nn.LeakyReLU()]
-            out_channels *= 2
-
-        out_channels //= 2
-        in_channels = out_channels
-
-        block += [nn.Conv2d(in_channels, out_channels, 3),
-                  nn.LeakyReLU(0.2),
-                  nn.Conv2d(out_channels, out_channels, 3)]
-
-        self.feature_extraction = nn.Sequential(*block)
-
-        self.avgpool = nn.AdaptiveAvgPool2d((512, 512))
-
-        self.classification = nn.Sequential(
-            nn.Linear(8192, 100),
-            nn.Linear(100, 1)
+class DiscriminatorBlock(nn.Module):
+    def __init__(self, input_channel, output_channel, stride=1, kernel_size=3, padding=1):
+        super().__init__()
+        self.layer = nn.Sequential(
+            nn.Conv2d(input_channel, output_channel, kernel_size, stride, padding),
+            nn.BatchNorm2d(output_channel),
+            nn.LeakyReLU(inplace=True)
         )
 
     def forward(self, x):
-        x = self.feature_extraction(x)
-        x = x.view(x.size(0), -1)
-        x = self.classification(x)
+        x = self.layer(x)
+        return x
+
+
+class DiscriminatorNet(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.conv1 = nn.Sequential(
+            nn.Conv2d(3, 64, 3, stride=1, padding=1),
+            nn.LeakyReLU(inplace=True),
+        )
+        self.down = nn.Sequential(
+            DiscriminatorBlock(64, 64, stride=2, padding=1),
+            DiscriminatorBlock(64, 128, stride=1, padding=1),
+            DiscriminatorBlock(128, 128, stride=2, padding=1),
+            DiscriminatorBlock(128, 256, stride=1, padding=1),
+            DiscriminatorBlock(256, 256, stride=2, padding=1),
+            DiscriminatorBlock(256, 512, stride=1, padding=1),
+            DiscriminatorBlock(512, 512, stride=2, padding=1),
+        )
+        self.dense = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            nn.Conv2d(512, 1024, 1),
+            nn.LeakyReLU(inplace=True),
+            nn.Conv2d(1024, 1, 1),
+            nn.Sigmoid()
+        )
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.down(x)
+        x = self.dense(x)
         return x
 
 
 class PerceptualLoss(nn.Module):
+    """
+    感知损失
+    """
     def __init__(self):
         super(PerceptualLoss, self).__init__()
 
-        vgg = vgg19(pretrained=True)
+        vgg = vgg19(weights=VGG19_Weights.DEFAULT)
         loss_network = nn.Sequential(*list(vgg.features)[:35]).eval()
         for param in loss_network.parameters():
             param.requires_grad = False
