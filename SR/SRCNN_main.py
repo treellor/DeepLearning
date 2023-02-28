@@ -27,7 +27,7 @@ from torch.utils.data import DataLoader
 from torchvision.utils import save_image, make_grid
 
 from data_read import ImageDatasetResize, ImageDatasetCrop
-from SRCNN_model import SRCNN
+from SRCNN_models import SRCNN
 
 
 def psnr(label, outputs, max_val=1.0):
@@ -95,14 +95,14 @@ def train(opt):
     save_folder_model = os.path.join(opt.save_folder, r"SRCNN/models")
     os.makedirs(save_folder_image, exist_ok=True)
     os.makedirs(save_folder_model, exist_ok=True)
-    #读取数据
+    # 读取数据
     data_folder = opt.folder_data
     batch_size = opt.batch_size
-    img_h = opt.crop_img_h
-    img_w = opt.crop_img_w
+
     upsampling_n = para.upsampling_n
     # dataset = ImageDatasetResize(data_folder, [img_h, img_w], is_same_shape=True)
-    dataset = ImageDatasetCrop(data_folder, [img_h, img_w], is_same_shape=True, down_sampling=upsampling_n)
+    dataset = ImageDatasetCrop(data_folder, img_H=opt.crop_img_h, img_W=opt.crop_img_w, is_same_shape=True,
+                               down_sampling=upsampling_n)
 
     data_len = dataset.__len__()
     val_data_len = batch_size  # int(data_len * 0.20)
@@ -192,7 +192,7 @@ def train(opt):
             srcnn.eval()
             show_image_gen = srcnn(show_image_lr)
             save_image_train(show_image_hr, show_image_lr, show_image_gen, save_folder_image, epoch + 1 + trained_epoch,
-                       show_example)
+                             show_example)
             # 保存最新的参数和损失最小的参数
             save_model(os.path.join(save_folder_model, f"epoch_{epoch + 1 + trained_epoch}_model.pth"), srcnn,
                        optimizer, epoch + 1 + trained_epoch)
@@ -233,7 +233,7 @@ def run(opt):
     srcnn.to(device)
     load_model(opt.load_models_path, srcnn)
     srcnn.eval()
-    for idx, datas_hl in tqdm(enumerate(result_loader),  total=int(len(result_loader))):
+    for idx, datas_hl in tqdm(enumerate(result_loader), total=int(len(result_loader))):
         image_l = datas_hl["lr"].to(device)
         image_h = datas_hl["hr"].to(device)
         image_gen = srcnn(image_l)
@@ -242,7 +242,6 @@ def run(opt):
         gen_hr = make_grid(image_gen, nrow=1, normalize=True)
         img_grid = torch.cat((imgs_hr, imgs_lr, gen_hr), -1)
         save_image(img_grid, os.path.join(save_folder_result, f'picture_{idx}_Image.png'), normalize=False)
-
 
 
 def parse_args():
@@ -271,8 +270,8 @@ if __name__ == '__main__':
     para.crop_img_h = 160
     para.upsampling_n = 4
     para.epochs = 100
-    #para.save_epoch = set(range(1, 100, 20))
+    # para.save_epoch = set(range(1, 100, 20))
     para.load_models = False
     para.load_models_path = r"./working/SRCNN/models/epoch_200_model.pth"
     train(para)
-    #run(para)
+    # run(para)

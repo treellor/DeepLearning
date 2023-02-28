@@ -25,10 +25,9 @@
         # Tensor = torch.cuda.FloatTensor if torch.cuda.is_available() else torch.Tensor
     # fake_labels = Variable(Tensor(np.zeros((images_l.size(0), 1, 1, 1))), requires_grad=False)
 """
+
 import os
-
 import argparse
-
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
@@ -37,7 +36,7 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 from data_read import ImageDatasetHighLow
 from ESRGAN_model import GeneratorNet, DiscriminatorNet, PerceptualLoss
-
+from PIL import Image
 
 def save_model(save_path, model, optimizer, epoch_n):
     torch.save({"model_dict": model.state_dict(), "optimizer_dict": optimizer.state_dict(), "epoch_n": epoch_n},
@@ -238,7 +237,12 @@ def train(opt):
             gen_hr = make_grid(gen_hr, nrow=1, normalize=True)
 
             img_grid = torch.cat((imgs_hr, imgs_lr, gen_hr), -1)
-            save_image(img_grid, os.path.join(save_folder_image, f"epoch_{current_epoch}.png"), normalize=False)
+            image_path_temp =os.path.join(save_folder_image, f"epoch_{current_epoch}.png")
+            save_image(img_grid, image_path_temp, normalize=False)
+            img = Image.open(image_path_temp)
+            plt.imshow(img)
+            plt.show()
+
             # Save model checkpoints
             save_model(os.path.join(save_folder_model, f"epoch_{current_epoch}_generator.pth"),
                        generator, optimizer_G, current_epoch)
@@ -287,7 +291,7 @@ def parse_args():
 if __name__ == '__main__':
     para = parse_args()
     para.folder_data = '../data/coco_sub'
-    para.epochs = 5
+    para.epochs = 3
     # para.save_epoch = set(range(1, 10, 5))
     para.load_models = False
     para.load_models_path_gen = r"./working/ESRGAN/models/epoch_5850_generator.pth"

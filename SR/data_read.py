@@ -21,30 +21,106 @@ def is_image_file(filename):
     return any(filename.endswith(extension) for extension in ['.bmp', '.png', '.jpg', '.jpeg', '.PNG', '.JPG', '.JPEG'])
 
 
-class ImageDatasetResize(Dataset):
-    """
-     scale the image to fix shape
-    """
+class ImageDatasetCropSingle(Dataset):
+    def __init__(self, path, img_H=64, img_W=64, is_Normalize=False, mean=None, std=None, max_count=None):
+        super(ImageDatasetCropSingle, self).__init__()
 
-    def __init__(self, path, resize_shape_hw=None, is_same_shape=False, down_sampling=4, is_Normalize=False,
+        crop_trans = [tfs.RandomCrop((img_H, img_W), Image.BICUBIC), tfs.ToTensor()]
+        if is_Normalize:
+            if std is None:
+                std = [0.229, 0.224, 0.225]
+            if mean is None:
+                mean = [0.485, 0.456, 0.406]
+            crop_trans.append(tfs.Normalize(mean, std))
+
+        self.crop_transforms = tfs.Compose(crop_trans)
+
+        self.filePaths = []
+        folders = os.listdir(path)
+        count = 0
+        for f in folders:
+            fp = os.path.join(path, f)
+            if is_image_file(fp):
+                img = Image.open(fp)
+                if img.mode != 'RGB':
+                    continue
+                w, h = img.size
+                if w < img_W or h < img_H:
+                    continue
+                if max_count is not None:
+                    if count >= max_count:
+                        break
+                self.filePaths.append(fp)
+                count = count + 1
+
+    def __len__(self):
+        return len(self.filePaths)
+
+    def __getitem__(self, item):
+        img = Image.open(self.filePaths[item])
+        if img.mode != 'RGB':
+            raise ValueError("Image:{} isn't RGB mode.".format(self.filePaths[item]))
+        # img, _cb, _cr = img.convert('YCbCr').split() 图像转换
+
+        crop_image = self.crop_transforms(img)
+        return crop_image
+
+
+class ImageDatasetResizeSingle(Dataset):
+    def __init__(self, path, img_H=64, img_W=64, is_Normalize=False, mean=None, std=None, max_count=None):
+
+        super(ImageDatasetResizeSingle, self).__init__()
+
+        trans = [tfs.Resize((img_H, img_W), tfs.InterpolationMode.BICUBIC), tfs.ToTensor()]
+        if is_Normalize:
+            if std is None:
+                std = [0.229, 0.224, 0.225]
+            if mean is None:
+                mean = [0.485, 0.456, 0.406]
+            trans.append(tfs.Normalize(mean, std))
+        self.transforms = tfs.Compose(trans)
+
+        self.filePaths = []
+        folders = os.listdir(path)
+        count = 0
+        for f in folders:
+            fp = os.path.join(path, f)
+            if is_image_file(fp):
+                if max_count is not None:
+                    if count >= max_count:
+                        break
+                self.filePaths.append(fp)
+                count = count + 1
+
+    def __len__(self):
+        return len(self.filePaths)
+
+    def __getitem__(self, item):
+        img = Image.open(self.filePaths[item])
+        if img.mode != 'RGB':
+            raise ValueError("Image:{} isn't RGB mode.".format(self.filePaths[item]))
+        # img, _cb, _cr = img.convert('YCbCr').split() 图像转换
+        img = self.transforms(img)
+        return img
+
+
+class ImageDatasetResize(Dataset):
+    def __init__(self, path, img_H=128, img_W=128, is_same_shape=False, down_sampling=4, is_Normalize=False,
                  mean=None, std=None, max_count=None):
 
         super(ImageDatasetResize, self).__init__()
 
-        if resize_shape_hw is None:
-            resize_shape_hw = [128, 128]
         if std is None:
             std = [0.229, 0.224, 0.225]
         if mean is None:
             mean = [0.485, 0.456, 0.406]
-        hr_height, hr_width = resize_shape_hw
 
-        hr_trans = [tfs.Resize((hr_height, hr_height), tfs.InterpolationMode.BICUBIC), tfs.ToTensor()]
+        hr_trans = [tfs.Resize((img_H, img_W), tfs.InterpolationMode.BICUBIC), tfs.ToTensor()]
         if is_Normalize:
             hr_trans.append(tfs.Normalize(mean, std))
         self.hr_transforms = tfs.Compose(hr_trans)
 
-        lr_trans = [tfs.Resize((hr_height // down_sampling, hr_width // down_sampling), tfs.InterpolationMode.BICUBIC),
+        lr_trans = [tfs.Resize((img_H // down_sampling, img_W // down_sampling), tfs.InterpolationMode.BICUBIC),
                     tfs.ToTensor()]
         if is_Normalize:
             lr_trans.append(tfs.Normalize(mean, std))
@@ -83,25 +159,18 @@ class ImageDatasetResize(Dataset):
 
 
 class ImageDatasetCrop(Dataset):
-    """
-    crop the images to fix shape
-    """
-
-    def __init__(self, path, crop_shape_hw=None, is_same_shape=False, down_sampling=4, is_Normalize=False,
+    def __init__(self, path, img_H=128, img_W=128, is_same_shape=False, down_sampling=4, is_Normalize=False,
                  mean=None, std=None, max_count=None):
 
         super(ImageDatasetCrop, self).__init__()
 
-        if crop_shape_hw is None:
-            crop_shape_hw = [128, 128]
         if std is None:
             std = [0.229, 0.224, 0.225]
         if mean is None:
             mean = [0.485, 0.456, 0.406]
         self.is_save_shape = is_same_shape
-        hr_height, hr_width = crop_shape_hw
-        self.crop_transforms = tfs.Compose([tfs.RandomCrop((hr_height, hr_height), Image.BICUBIC)])
-        self.resize_transforms_down = tfs.Compose([tfs.Resize((hr_height // down_sampling, hr_width // down_sampling),
+        self.crop_transforms = tfs.Compose([tfs.RandomCrop((img_H, img_W), Image.BICUBIC)])
+        self.resize_transforms_down = tfs.Compose([tfs.Resize((img_H // down_sampling, img_W // down_sampling),
                                                               tfs.InterpolationMode.BICUBIC)])
 
         hr_trans = [tfs.ToTensor()]
@@ -111,7 +180,7 @@ class ImageDatasetCrop(Dataset):
 
         lr_trans = [tfs.ToTensor()]
         if is_same_shape:
-            lr_trans.append(tfs.Resize((hr_height, hr_width), tfs.InterpolationMode.BICUBIC))
+            lr_trans.append(tfs.Resize((img_H, img_W), tfs.InterpolationMode.BICUBIC))
         if is_Normalize:
             lr_trans.append(tfs.Normalize(mean, std))
         self.lr_transforms = tfs.Compose(lr_trans)
@@ -121,18 +190,18 @@ class ImageDatasetCrop(Dataset):
         count = 0
         for f in folders:
             fp = os.path.join(path, f)
-
-            img = Image.open(fp)
-            if img.mode != 'RGB':
-                continue
-            w, h = img.size
-            if w < hr_width or h < hr_height:
-                continue
-            if max_count is not None:
-                if count >= max_count:
-                    break
-            self.filePaths.append(fp)
-            count = count + 1
+            if is_image_file(fp):
+                img = Image.open(fp)
+                if img.mode != 'RGB':
+                    continue
+                w, h = img.size
+                if w < img_W or h < img_H:
+                    continue
+                if max_count is not None:
+                    if count >= max_count:
+                        break
+                self.filePaths.append(fp)
+                count = count + 1
 
     def __len__(self):
         return len(self.filePaths)
