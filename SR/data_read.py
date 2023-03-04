@@ -105,7 +105,7 @@ class ImageDatasetResizeSingle(Dataset):
 
 
 class ImageDatasetResize(Dataset):
-    def __init__(self, path, img_H=128, img_W=128, is_same_shape=False, down_sampling=4, is_Normalize=False,
+    def __init__(self, path, img_H=128, img_W=128, is_same_shape=False, scale_factor=4, is_Normalize=False,
                  mean=None, std=None, max_count=None):
 
         super(ImageDatasetResize, self).__init__()
@@ -120,7 +120,7 @@ class ImageDatasetResize(Dataset):
             hr_trans.append(tfs.Normalize(mean, std))
         self.hr_transforms = tfs.Compose(hr_trans)
 
-        lr_trans = [tfs.Resize((img_H // down_sampling, img_W // down_sampling), tfs.InterpolationMode.BICUBIC),
+        lr_trans = [tfs.Resize((img_H // scale_factor, img_W // scale_factor), tfs.InterpolationMode.BICUBIC),
                     tfs.ToTensor()]
         if is_Normalize:
             lr_trans.append(tfs.Normalize(mean, std))
@@ -159,7 +159,7 @@ class ImageDatasetResize(Dataset):
 
 
 class ImageDatasetCrop(Dataset):
-    def __init__(self, path, img_H=128, img_W=128, is_same_shape=False, down_sampling=4, is_Normalize=False,
+    def __init__(self, path, img_H=128, img_W=128, is_same_shape=False, scale_factor=4, is_Normalize=False,
                  mean=None, std=None, max_count=None):
 
         super(ImageDatasetCrop, self).__init__()
@@ -170,7 +170,7 @@ class ImageDatasetCrop(Dataset):
             mean = [0.485, 0.456, 0.406]
         self.is_save_shape = is_same_shape
         self.crop_transforms = tfs.Compose([tfs.RandomCrop((img_H, img_W), Image.BICUBIC)])
-        self.resize_transforms_down = tfs.Compose([tfs.Resize((img_H // down_sampling, img_W // down_sampling),
+        self.resize_transforms_down = tfs.Compose([tfs.Resize((img_H // scale_factor, img_W // scale_factor),
                                                               tfs.InterpolationMode.BICUBIC)])
 
         hr_trans = [tfs.ToTensor()]

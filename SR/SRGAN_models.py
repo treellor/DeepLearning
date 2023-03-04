@@ -43,7 +43,7 @@ class ResidualBlock(nn.Module):
 
 
 class GeneratorResNet(nn.Module):
-    def __init__(self, in_channels=3, out_channels=3, n_residual_blocks=16, sampling_n=4):
+    def __init__(self, in_channels=3, n_residual_blocks=16, scale_factor=4):
         super(GeneratorResNet, self).__init__()
 
         # First layer
@@ -64,7 +64,7 @@ class GeneratorResNet(nn.Module):
         )
         # Up_Sampling layers
         block = []
-        for _ in range(sampling_n // 2):
+        for _ in range(scale_factor // 2):
             block += [
                 nn.Conv2d(64, 256, 3, stride=1, padding=1),
                 nn.PixelShuffle(upscale_factor=2),
@@ -74,7 +74,7 @@ class GeneratorResNet(nn.Module):
 
         # Final output layer
         self.conv3 = nn.Sequential(
-            nn.Conv2d(64, out_channels, kernel_size=9, stride=1, padding=4),
+            nn.Conv2d(64, in_channels, kernel_size=9, stride=1, padding=4),
             nn.Tanh()
         )
 
@@ -89,7 +89,7 @@ class GeneratorResNet(nn.Module):
 
 
 class DiscriminatorNet(nn.Module):
-    def __init__(self, input_shape  ):
+    def __init__(self, input_shape):
         super().__init__()
 
         self.input_shape = input_shape

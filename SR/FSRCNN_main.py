@@ -1,9 +1,9 @@
 """
     Author		:  Treellor
     Version		:  v1.0
-    Date		:  2022.12.19
+    Date		:  2023.3.3
     Description	:
-            SRCNN 模型训练
+            FSRCNN 模型训练
     Others		:  //其他内容说明
     History		:
      1.Date:
@@ -11,49 +11,55 @@
        Modification:
      2.…………
 """
-
 import os
 import argparse
-import torch
-import torch.nn as nn
-import torch.optim as optim
 
-from matplotlib import pyplot as plt
+import torch
+from torch import nn
+import torch.optim as optim
+from torch.utils.data.dataloader import DataLoader
 from tqdm import tqdm
-from torch.utils.data import DataLoader
-from torchvision.utils import save_image, make_grid
+from matplotlib import pyplot as plt
+from torchvision.utils import make_grid, save_image
 
 from data_read import ImageDatasetCrop
-from SRCNN_models import SRCNN
+from FSRCNN_models import FSRCNN
 from common import save_model, load_model, calc_psnr, AverageMeter
 
 
 def train(opt):
     # 创建文件夹
-    save_folder_image = os.path.join(opt.save_folder, r"SRCNN/images")
-    save_folder_model = os.path.join(opt.save_folder, r"SRCNN/models")
+    save_folder_image = os.path.join(opt.save_folder, r"FSRCNN/images")
+    save_folder_model = os.path.join(opt.save_folder, r"FSRCNN/models")
     os.makedirs(save_folder_image, exist_ok=True)
     os.makedirs(save_folder_model, exist_ok=True)
 
     # 读取数据
-    dataset = ImageDatasetCrop(opt.data_folder, img_H=opt.img_h, img_W=opt.img_w, is_same_shape=True,
+    dataset = ImageDatasetCrop(opt.data_folder, img_H=opt.img_h, img_W=opt.img_w, is_same_shape=False,
                                scale_factor=opt.scale_factor)
+
     data_len = dataset.__len__()
     val_data_len = opt.batch_size * 2
+
     train_set, val_set = torch.utils.data.random_split(dataset, [data_len - val_data_len, val_data_len])
     train_loader = DataLoader(dataset=train_set, num_workers=0, batch_size=opt.batch_size, shuffle=True)
     val_loader = DataLoader(dataset=val_set, num_workers=0, batch_size=opt.batch_size, shuffle=True)
 
     # 建立模型
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    srcnn = SRCNN().to(device)
-    optimizer = optim.Adam(srcnn.parameters())
+    fsrcnn = FSRCNN(scale_factor=opt.scale_factor).to(device)
+
+    optimizer = optim.Adam(fsrcnn.parameters())
     criterion = nn.MSELoss().to(device)
 
-    # 已经训练的 epoch数量
+    # 已经训练的 opoch数量
     trained_epoch = 0
     if opt.load_models:
-        trained_epoch = load_model(opt.load_models_path, srcnn, optimizer)
+        trained_epoch = load_model(opt.load_models_path, fsrcnn, optimizer)
+
+    #  per_image_mse_loss = F.mse_loss(HR, newHR, reduction='none')
+    train_loss_all, val_loss_all = [], []
+    train_psnr_all, val_psnr_all = [], []
 
     # 读取显示图像
     show_data1 = dataset[0]
@@ -62,39 +68,33 @@ def train(opt):
     show_data4 = dataset[3]
     show_image_hr = torch.stack([show_data1["hr"], show_data2["hr"], show_data3["hr"], show_data4["hr"]], 0).to(device)
     show_image_lr = torch.stack([show_data1["lr"], show_data2["lr"], show_data3["lr"], show_data4["lr"]], 0).to(device)
-
     # 强制保存最后一个epoch
     n_epochs = opt.epochs
     save_epoch = opt.save_epoch.union({n_epochs + trained_epoch})
-    # 评估参数
-    train_loss_all, val_loss_all = [], []
-    train_psnr_all, val_psnr_all = [], []
 
     for epoch in tqdm(range(trained_epoch, trained_epoch + n_epochs), desc=f'epoch'):
+        fsrcnn.train()
         epoch_train_loss = AverageMeter()
         epoch_train_psnr = AverageMeter()
-        srcnn.train()
         for images_hl in train_loader:
             img_lr = images_hl["lr"].to(device)
             img_hr = images_hl["hr"].to(device)
 
-            img_gen = srcnn(img_lr)
+            sr_img = fsrcnn(img_lr)
 
-            # srcnn.zero_grad()
             optimizer.zero_grad()
-            train_loss = criterion(img_gen, img_hr)
+            train_loss = criterion(img_hr, sr_img)
             train_loss.backward(retain_graph=True)
             optimizer.step()
+            train_psnr = calc_psnr(sr_img.detach(), img_hr)
 
-            train_psnr = calc_psnr(img_gen.detach(), img_hr)
-
-            epoch_train_loss.update(train_loss.item(), len(img_hr))
-            epoch_train_psnr.update(train_psnr.item(), len(img_hr))
+            epoch_train_loss.update(train_loss.item(), len(img_lr))
+            epoch_train_psnr.update(train_psnr.item(), len(img_lr))
 
         train_loss_all.append(epoch_train_loss.avg)
         train_psnr_all.append(epoch_train_psnr.avg)
 
-        srcnn.eval()
+        fsrcnn.eval()
         epoch_val_loss = AverageMeter()
         epoch_val_psnr = AverageMeter()
         with torch.no_grad():
@@ -102,28 +102,31 @@ def train(opt):
                 image_l = datas_hl["lr"].to(device)
                 image_h = datas_hl["hr"].to(device)
 
-                image_gen = srcnn(image_l)
+                sr_img = fsrcnn(image_l)
 
-                val_loss = criterion(image_gen, image_h)
-                epoch_val_loss.update(val_loss.item(), len(image_l))
-                val_psnr = calc_psnr(image_gen, image_h)
-                epoch_val_psnr.update(val_psnr.item(), len(image_l))
+                val_loss = criterion(sr_img, image_h)
+                epoch_val_loss.update(val_loss.item(), len(sr_img))
+                val_psnr = calc_psnr(sr_img, image_h)
+                epoch_val_psnr.update(val_psnr.item(), len(sr_img))
 
         val_loss_all.append(epoch_val_loss.avg)
         val_psnr_all.append(epoch_val_psnr.avg)
 
-        # save the result
+        # save the last epoch
         if epoch + 1 in save_epoch:
-            srcnn.eval()
-            show_image_gen = srcnn(show_image_lr)
-            gen_hr = make_grid(show_image_gen, nrow=1, normalize=True)
-            img_lr = make_grid(show_image_lr, nrow=1, normalize=True)
+            fsrcnn.eval()
+            show_image_sr = fsrcnn(show_image_lr)
+
+            img_lr = nn.functional.interpolate(show_image_lr, scale_factor=opt.scale_factor)
+            img_lr = make_grid(img_lr, nrow=1, normalize=True)
             img_hr = make_grid(show_image_hr, nrow=1, normalize=True)
+            gen_hr = make_grid(show_image_sr, nrow=1, normalize=True)
+
             img_grid = torch.cat((img_hr, img_lr, gen_hr), -1)
             save_image(img_grid, os.path.join(save_folder_image, f"epoch_{epoch + 1}.png"), normalize=False)
 
             # 保存最新的参数和损失最小的参数
-            save_model(os.path.join(save_folder_model, f"epoch_{epoch + 1 }_model.pth"), srcnn,
+            save_model(os.path.join(save_folder_model, f"epoch_{epoch + 1}_model.pth"), fsrcnn,
                        optimizer, epoch + 1)
 
     plt.figure(figsize=(10, 7))
@@ -147,26 +150,29 @@ def train(opt):
 
 def run(opt):
 
-    save_folder_result = os.path.join(opt.save_folder, r"SRCNN/results")
+    save_folder_result = os.path.join(opt.save_folder, r"FSRCNN/results")
     os.makedirs(save_folder_result, exist_ok=True)
 
-
-    dataset = ImageDatasetCrop(opt.data_folder, img_H=opt.img_h, img_W=opt.img_w, is_same_shape=True,
+    dataset = ImageDatasetCrop(opt.data_folder, img_H=opt.img_h, img_W=opt.img_w, is_same_shape=False,
                                scale_factor=opt.scale_factor, max_count=16)
     result_loader = DataLoader(dataset=dataset, num_workers=0, batch_size=opt.batch_size, shuffle=False)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    srcnn = SRCNN().to(device)
-    load_model(opt.load_models_path, srcnn)
+    fsrcnn = FSRCNN().to(device)
 
-    srcnn.eval()
+    load_model(opt.load_models_path, fsrcnn)
+    fsrcnn.eval()
     for idx, datas_hl in tqdm(enumerate(result_loader), total=int(len(result_loader))):
         image_l = datas_hl["lr"].to(device)
         image_h = datas_hl["hr"].to(device)
-        image_gen = srcnn(image_l)
+        image_gen = fsrcnn(image_l)
+
+        image_l = nn.functional.interpolate(image_l, scale_factor=opt.scale_factor)
+
         imgs_lr = make_grid(image_l, nrow=1, normalize=True)
         imgs_hr = make_grid(image_h, nrow=1, normalize=True)
         gen_hr = make_grid(image_gen, nrow=1, normalize=True)
+
         img_grid = torch.cat((imgs_hr, imgs_lr, gen_hr), -1)
         save_image(img_grid, os.path.join(save_folder_result, f'picture_{idx}_Image.png'), normalize=False)
 
@@ -196,16 +202,18 @@ if __name__ == '__main__':
 
     if is_train:
         para = parse_args()
-        para.data_folder = '../data/T91'
+        para.folder_data = '../data/T91'
         para.save_folder = r"./working/"
         para.img_w = 160
         para.img_h = 160
         para.scale_factor = 4
-        para.epochs = 50
+        para.epochs = 200
         # para.save_epoch = set(range(1, 100, 20))
         para.load_models = True
-        para.load_models_path = r"./working/SRCNN/models/epoch_150_model.pth"
+        para.load_models_path = r"./working/FSRCNN/models/epoch_200_model.pth"
+
         train(para)
+
     else:
         para = parse_args()
         para.folder_data = '../data/T91'
@@ -214,7 +222,6 @@ if __name__ == '__main__':
         para.img_h = 160
         para.scale_factor = 4
         para.batch_size =16
-        para.load_models_path = r"./working/SRCNN/models/epoch_200_model.pth"
+        para.load_models_path = r"./working/FSRCNN/models/epoch_400_model.pth"
 
         run(para)
-
