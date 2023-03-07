@@ -159,7 +159,7 @@ class ImageDatasetResize(Dataset):
 
 
 class ImageDatasetCrop(Dataset):
-    def __init__(self, path, img_H=128, img_W=128, is_same_shape=False, scale_factor=4, is_Normalize=False,
+    def __init__(self, path, img_H=128, img_W=128, is_same_shape=False, scale_factor=4, is_Normalize=True,
                  mean=None, std=None, max_count=None):
 
         super(ImageDatasetCrop, self).__init__()

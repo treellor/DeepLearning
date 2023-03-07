@@ -122,9 +122,9 @@ def train(opt):
             img_grid = torch.cat((img_hr, img_lr, gen_hr), -1)
             save_image(img_grid, os.path.join(save_folder_image, f"epoch_{epoch + 1}.png"), normalize=False)
 
-            image_show( img_grid )
+            image_show(img_grid)
             # 保存最新的参数和损失最小的参数
-            save_model(os.path.join(save_folder_model, f"epoch_{epoch + 1 }_model.pth"), srcnn,
+            save_model(os.path.join(save_folder_model, f"epoch_{epoch + 1}_model.pth"), srcnn,
                        optimizer, epoch + 1)
 
     plt.figure(figsize=(10, 7))
@@ -147,10 +147,8 @@ def train(opt):
 
 
 def run(opt):
-
     save_folder_result = os.path.join(opt.save_folder, r"SRCNN/results")
     os.makedirs(save_folder_result, exist_ok=True)
-
 
     dataset = ImageDatasetCrop(opt.data_folder, img_H=opt.img_h, img_W=opt.img_w, is_same_shape=True,
                                scale_factor=opt.scale_factor, max_count=16)
@@ -214,8 +212,7 @@ if __name__ == '__main__':
         para.img_w = 160
         para.img_h = 160
         para.scale_factor = 4
-        para.batch_size =16
+        para.batch_size = 16
         para.load_models_path = r"./working/SRCNN/models/epoch_200_model.pth"
 
         run(para)
-

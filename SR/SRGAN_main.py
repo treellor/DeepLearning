@@ -21,29 +21,24 @@ from torchvision.utils import save_image, make_grid
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 
-from data_read import ImageDatasetHighLow,ImageDatasetCrop
-from SRGAN_models import GeneratorResNet, DiscriminatorNet, FeatureExtractor
-from common import save_model, load_model, calc_psnr, AverageMeter,image_show
+from data_read import ImageDatasetCrop
+from SRGAN_models import GeneratorResNet, DiscriminatorNet, TrainerSRGAN
+from common import save_model, load_model, calc_psnr, AverageMeter, image_show
 
 
 def train(opt):
-
     save_folder_image = os.path.join(opt.save_folder, r"SRGAN/images")
     save_folder_model = os.path.join(opt.save_folder, r"SRGAN/models")
     os.makedirs(save_folder_image, exist_ok=True)
     os.makedirs(save_folder_model, exist_ok=True)
 
-    # img_shape = (opt.hr_channels, opt.hr_height, opt.hr_width)
     # 读取数据
-    # dataset_high = os.path.join(opt.data_folder, r"high")
-    # dataset_low = os.path.join(opt.data_folder, r"low")
-    # dataset = ImageDatasetHighLow(dataset_high, dataset_low)
-    dataset = ImageDatasetCrop(opt.data_folder,  opt.hr_height, opt.hr_width, scale_factor=4)
+    dataset = ImageDatasetCrop(opt.data_folder, opt.hr_height, opt.hr_width, is_Normalize=True, scale_factor=4)
 
     img_shape = tuple(dataset[0]['hr'].shape)
 
     data_len = dataset.__len__()
-    val_data_len = opt.batch_size*2
+    val_data_len = opt.batch_size * 3
     train_set, val_set = torch.utils.data.random_split(dataset, [data_len - val_data_len, val_data_len])
     test_dataloader = DataLoader(dataset=val_set, num_workers=0, batch_size=opt.batch_size, shuffle=True)
     train_dataloader = DataLoader(dataset=train_set, num_workers=0, batch_size=opt.batch_size, shuffle=True)
@@ -53,14 +48,8 @@ def train(opt):
 
     generator = GeneratorResNet(in_channels=img_shape[0], scale_factor=opt.scale_factor).to(device)
     discriminator = DiscriminatorNet(input_shape=img_shape).to(device)
-
-    # Set feature extractor to inference mode
-    feature_extractor = FeatureExtractor().to(device)
-    feature_extractor.eval()
-
-    # Losses
-    criterion_GAN = torch.nn.MSELoss().to(device)
-    criterion_content = torch.nn.L1Loss().to(device)
+    # define the trainer
+    trainer = TrainerSRGAN(device)
 
     optimizer_G = torch.optim.Adam(generator.parameters(), lr=opt.lr, betas=(opt.b1, opt.b2))  # lr = 0.00008
     optimizer_D = torch.optim.Adam(discriminator.parameters(), lr=opt.lr, betas=(opt.b1, opt.b2))
@@ -103,44 +92,27 @@ def train(opt):
             real_labels = torch.ones((images_l.size(0), *discriminator.output_shape)).to(device)
             fake_labels = torch.zeros((images_l.size(0), *discriminator.output_shape)).to(device)
 
-            # ------------------
-            #  Train Generators
-            # ------------------
-            optimizer_G.zero_grad()
-
             # Generate a high resolution image from low resolution input
             gen_hr = generator(images_l)
 
-            # Adversarial loss
-            loss_GAN = criterion_GAN(discriminator(gen_hr), real_labels)
+            if epoch < opt.warm_epochs + trained_epoch:
+                trainer.pre_train_generator(optimizer_G, gen_hr, images_h)
+                continue
 
-            # Content loss
-            gen_features = feature_extractor(gen_hr)
-            real_features = feature_extractor(images_h)
-            loss_content = criterion_content(gen_features, real_features.detach())
-
-            # Total loss
-            loss_G = loss_content + 1e-3 * loss_GAN
-            loss_G.backward()
-            optimizer_G.step()
+            # ------------------
+            #  Train Generators
+            # ------------------
+            loss_G = trainer.train_generator(optimizer_G, discriminator, gen_hr, images_h, real_labels)
 
             train_pnsr = calc_psnr(gen_hr.detach(), images_h)
+
             epoch_train_gen.update(loss_G.item(), len(images_h))
             epoch_train_psnr.update(train_pnsr.item(), len(images_h))
 
             # ---------------------
             #  Train Discriminator
             # ---------------------
-            optimizer_D.zero_grad()
-
-            # Loss of real and fake images
-            loss_real = criterion_GAN(discriminator(images_h), real_labels)
-            loss_fake = criterion_GAN(discriminator(gen_hr.detach()), fake_labels)
-
-            # Total loss
-            loss_D = 1- loss_real + loss_fake
-            loss_D.backward()
-            optimizer_D.step()
+            loss_D = trainer.train_discriminator(optimizer_D, discriminator, gen_hr, images_h, real_labels, fake_labels)
 
             epoch_train_dis.update(loss_D.item(), len(images_l))
 
@@ -148,9 +120,7 @@ def train(opt):
         train_psnr_all.append(epoch_train_psnr.avg)
         train_disc_losses.append(epoch_train_dis.avg)
 
-
         # Testing
-        gen_loss, disc_loss = 0, 0
         with torch.no_grad():
 
             generator.eval()
@@ -161,7 +131,6 @@ def train(opt):
 
             for batch_idx, images_hl in tqdm(enumerate(test_dataloader), desc=f'Validate Epoch {epoch}',
                                              total=int(len(test_dataloader))):
-
                 # Configure model input
                 img_lr = images_hl["lr"].to(device)
                 img_hr = images_hl["hr"].to(device)
@@ -172,22 +141,9 @@ def train(opt):
 
                 # Eval Generator
                 gen_hr = generator(img_lr)
+                loss_G = trainer.get_generate_loss(discriminator, gen_hr, img_hr, valid)
 
-                # Adversarial loss
-                loss_GAN = criterion_GAN(discriminator(gen_hr), valid)
-
-                # Content loss
-                gen_features = feature_extractor(gen_hr)
-                real_features = feature_extractor(img_hr)
-                loss_content = criterion_content(gen_features, real_features.detach())
-                # Total loss
-                loss_G = loss_content + 1e-3 * loss_GAN
-
-                # Loss of real and fake images
-                loss_real = criterion_GAN(discriminator(img_hr), valid)
-                loss_fake = criterion_GAN(discriminator(gen_hr.detach()), fake)
-                # Total loss
-                loss_D = 1 - loss_real + loss_fake
+                loss_D = trainer.get_disc_loss(discriminator, gen_hr, img_hr, valid, fake)
 
                 val_psnr = calc_psnr(gen_hr.detach(), img_hr)
 
@@ -213,7 +169,7 @@ def train(opt):
             img_grid = torch.cat((img_hr, img_lr, gen_hr), -1)
             save_image(img_grid, os.path.join(save_folder_image, f"epoch_{current_epoch}.png"), normalize=False)
 
-            #image_show(img_grid.cpu())
+            # image_show(img_grid.cpu())
 
             # Save model checkpoints
             save_model(os.path.join(save_folder_model, f"epoch_{current_epoch}_generator.pth"),
@@ -250,19 +206,16 @@ def train(opt):
 
 
 def run(opt):
-
     save_folder_image = os.path.join(opt.save_folder, r"SRGAN/results")
     os.makedirs(save_folder_image, exist_ok=True)
 
-    dataset_high = os.path.join(opt.data_folder, r"high")
-    dataset_low = os.path.join(opt.data_folder, r"low")
-    dataset = ImageDatasetHighLow(dataset_high, dataset_low)
+    dataset = ImageDatasetCrop(opt.data_folder, opt.hr_height, opt.hr_width, scale_factor=4)
 
     result_dataloader = DataLoader(dataset=dataset, num_workers=0, batch_size=opt.batch_size, shuffle=True)
 
     # Initialize generator and discriminator
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    generator = GeneratorResNet( in_channels=dataset[0]['hr'].shape[0], scale_factor=opt.scale_factor).to(device)
+    generator = GeneratorResNet(in_channels=dataset[0]['hr'].shape[0], scale_factor=opt.scale_factor).to(device)
     load_model(opt.load_models_path_gen, generator)
 
     generator.eval()
@@ -286,20 +239,18 @@ def parse_args():
     parser.add_argument('--data_folder', type=str, default='data/coco_sub', help='dataset path')
     parser.add_argument('--hr_height', type=int, default=256, help='High resolution image height')
     parser.add_argument('--hr_width', type=int, default=256, help='High resolution image width')
-
     parser.add_argument('--scale_factor', type=int, default=4, help='Image super-resolution coefficient')
     parser.add_argument("--lr", type=float, default=0.0002, help="adam: learning rate")
     parser.add_argument("--b1", type=float, default=0.5, help="adam: decay of first order momentum of gradient")
     parser.add_argument("--b2", type=float, default=0.999, help="adam: decay of first order momentum of gradient")
     parser.add_argument('--batch_size', type=int, default=4, help='total batch size for all GPUs')
     parser.add_argument('--epochs', type=int, default=5, help='total training epochs')
-
+    parser.add_argument('--warm_epochs', type=int, default=0, help='the Pre-training epochs')
     parser.add_argument('--load_models', type=bool, default=False, help='load pretrained model weight')
     parser.add_argument('--load_models_path_gen', type=str, default=r"./working/SRGAN/models/discriminator.pth",
                         help='load model path')
     parser.add_argument('--load_models_path_dis', type=str, default=r"./working/SRGAN/models/generator.pth",
                         help='load model path')
-
     parser.add_argument('--save_folder', type=str, default=r"./working/", help='image save path')
     parser.add_argument('--save_epoch', type=set, default=set(), help='number of saved epochs')
 
@@ -309,34 +260,36 @@ def parse_args():
 
 if __name__ == '__main__':
 
-    is_train = True
+    is_train = False
 
     if is_train:
         para = parse_args()
-        #para.data_folder = '../data/coco_sub'
+        # para.data_folder = '../data/T91'
         para.data_folder = '../data/DIV2K_train_LR_x8'
 
         para.save_folder = r"./working/"
         para.hr_height = 160
         para.hr_width = 160
         para.scale_factor = 4
-        para.epochs = 1
+        para.pre_train_epochs = 20
+        para.epochs = 80
+        para.batch_size = 8
         # para.save_epoch = set(range(1, 100, 20))
         para.load_models = True
-        para.load_models_path_gen = r"./working/SRGAN/models/epoch_60_generator.pth"
-        para.load_models_path_dis = r"./working/SRGAN/models/epoch_60_discriminator.pth"
+        para.load_models_path_gen = r"./working/SRGAN/models/epoch_1200_generator.pth"
+        para.load_models_path_dis = r"./working/SRGAN/models/epoch_1200_discriminator.pth"
 
         train(para)
 
     else:
         para = parse_args()
-        para.data_folder = '../data/coco_sub'
+        para.data_folder = '../data/T91'
         para.save_folder = r"./working/"
-        para.img_w = 256
-        para.img_h = 256
+        para.img_w = 160
+        para.img_h = 160
         para.scale_factor = 4
-        para.batch_size = 4
-        para.load_models_path_gen = r"./working/SRGAN/models/epoch_22_generator.pth"
-        para.load_models_path_dis = r"./working/SRGAN/models/epoch_22_discriminator.pth"
+        para.batch_size = 8
+        para.load_models_path_gen = r"./working/SRGAN/models/epoch_1200_generator.pth"
+        para.load_models_path_dis = r"./working/SRGAN/models/epoch_1200_discriminator.pth"
 
         run(para)

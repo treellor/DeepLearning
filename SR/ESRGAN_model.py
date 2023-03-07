@@ -114,8 +114,9 @@ class Discriminator(nn.Module):
         super(Discriminator, self).__init__()
 
         img_channels, img_height, img_width = input_shape
-        patch_h, patch_w = int(img_height / 2 ** 4), int(img_width / 2 ** 4)
-        self.output_shape = (1, patch_h, patch_w)
+        # patch_h, patch_w = int(img_height / 2 ** 4), int(img_width / 2 ** 4)
+        # self.output_shape = (1, patch_h, patch_w)
+        self.output_shape = (1, 1, 1)
 
         self.conv1 = nn.Sequential(
             nn.Conv2d(3, 64, 3, stride=1, padding=1),
@@ -153,3 +154,97 @@ class Discriminator(nn.Module):
         x = self.down(x)
         x = self.dense(x)
         return x
+
+
+class TrainerESRGAN:
+    def __init__(self, device):
+        # Set feature extractor to inference mode
+        self.feature_extractor = FeatureExtractor().to(device)
+        self.feature_extractor.eval()
+
+        # Losses
+        self.criterion_GAN = torch.nn.BCEWithLogitsLoss().to(device)
+        self.criterion_content = torch.nn.L1Loss().to(device)
+        self.criterion_pixel = torch.nn.L1Loss().to(device)
+
+    def pre_train_generator(self, optimizer_G, img_gen, img_hr):
+        optimizer_G.zero_grad()
+        # Content loss
+        loss_pixel = self.criterion_pixel(img_gen, img_hr)
+        loss_pixel.backward()
+        optimizer_G.step()
+
+    def train_generator(self, optimizer_G, discriminator, img_gen, img_hr, real_labels):
+        optimizer_G.zero_grad()
+        # pixel loss
+        loss_pixel = self.criterion_pixel(img_gen, img_hr)
+
+        # Adversarial loss (relativistic average GAN)
+        # Extract validity predictions from discriminator
+        real_score = discriminator(img_hr).detach()
+        fake_score = discriminator(img_gen)
+        loss_GAN = self.criterion_GAN(fake_score - real_score.mean(0, keepdim=True), real_labels)
+
+        # Content loss
+        gen_features = self.feature_extractor(img_gen).detach()
+        real_features = self.feature_extractor(img_hr)
+        loss_content = self.criterion_content(gen_features, real_features)
+
+        # Total generator loss
+        loss_G = loss_content + 5e-3 * loss_GAN + 1e-2 * loss_pixel
+        loss_G.backward()
+
+        optimizer_G.step()
+
+        return loss_G
+
+    def get_generate_loss(self, discriminator, img_gen, img_hr, real_labels):
+        with torch.no_grad():
+            loss_pixel = self.criterion_pixel(img_gen, img_hr)
+
+            # Adversarial loss (relativistic average GAN)
+            # Extract validity predictions from discriminator
+            real_score = discriminator(img_hr).detach()
+            fake_score = discriminator(img_gen)
+            loss_GAN = self.criterion_GAN(fake_score - real_score.mean(0, keepdim=True), real_labels)
+
+            # Content loss
+            gen_features = self.feature_extractor(img_gen).detach()
+            real_features = self.feature_extractor(img_hr)
+            loss_content = self.criterion_content(gen_features, real_features)
+
+            # Total generator loss
+            loss_G = loss_content + 5e-3 * loss_GAN + 1e-2 * loss_pixel
+            return loss_G
+
+    def train_discriminator(self, optimizer_D, discriminator, img_gen, img_hr, real_labels, fake_labels):
+        optimizer_D.zero_grad()
+
+        real_score = discriminator(img_hr)
+        fake_score = discriminator(img_gen.detach())
+
+        # Adversarial loss for real and fake images (relativistic average GAN)
+        loss_real = self.criterion_GAN(real_score - fake_score.mean(0, keepdim=True), real_labels)
+        loss_fake = self.criterion_GAN(fake_score - real_score.mean(0, keepdim=True), fake_labels)
+
+        # Total loss
+        loss_D = (loss_real + loss_fake) / 2
+        loss_D.backward()
+
+        optimizer_D.step()
+
+        return loss_D
+
+    def get_disc_loss(self, discriminator, img_gen, img_hr, real_labels, fake_labels):
+        with torch.no_grad():
+            real_score = discriminator(img_hr)
+            fake_score = discriminator(img_gen.detach())
+
+            # Adversarial loss for real and fake images (relativistic average GAN)
+            loss_real = self.criterion_GAN(real_score - fake_score.mean(0, keepdim=True), real_labels)
+            loss_fake = self.criterion_GAN(fake_score - real_score.mean(0, keepdim=True), fake_labels)
+
+            # Total loss
+            loss_D = (loss_real + loss_fake) / 2
+
+            return loss_D

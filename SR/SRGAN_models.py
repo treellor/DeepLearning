@@ -65,8 +65,8 @@ class GeneratorResNet(nn.Module):
         )
         # Up_Sampling layers
         block = []
-        upsample_block_num = int(log(scale_factor, 2))
-        for _ in range(upsample_block_num):
+        up_sample_block_num = int(log(scale_factor, 2))
+        for _ in range(up_sample_block_num):
             block += [
                 nn.Conv2d(64, 256, 3, stride=1, padding=1),
                 nn.PixelShuffle(upscale_factor=2),
@@ -96,7 +96,7 @@ class DiscriminatorNet(nn.Module):
 
         self.input_shape = input_shape
         in_channels, in_height, in_width = self.input_shape
-        patch_h, patch_w = int(in_height / 2 ** 4), int(in_width / 2 ** 4)
+        # patch_h, patch_w = int(in_height / 2 ** 4), int(in_width / 2 ** 4)
         # self.output_shape = (1, patch_h, patch_w)
         self.output_shape = (1, 1, 1)
 
@@ -131,6 +131,80 @@ class DiscriminatorNet(nn.Module):
     def forward(self, x):
         out = self.dense(self.model(x))
         return out
+
+
+class TrainerSRGAN:
+    def __init__(self, device):
+        # Set feature extractor to inference mode
+        self.feature_extractor = FeatureExtractor().to(device)
+        self.feature_extractor.eval()
+
+        # Losses
+        self.criterion_GAN = torch.nn.MSELoss().to(device)
+        self.criterion_content = torch.nn.L1Loss().to(device)
+
+    def pre_train_generator(self, optimizer_G, gen_hr, images_h):
+        optimizer_G.zero_grad()
+        # Content loss
+        loss_pixel = self.criterion_content(gen_hr, images_h)
+        loss_pixel.backward()
+        optimizer_G.step()
+
+    def train_generator(self, optimizer_G, discriminator, gen_hr, images_h, real_labels):
+        optimizer_G.zero_grad()
+        # Adversarial loss
+        loss_GAN = self.criterion_GAN(discriminator(gen_hr), real_labels)
+
+        # Content loss
+        gen_features = self.feature_extractor(gen_hr)
+        real_features = self.feature_extractor(images_h)
+        loss_content = self.criterion_content(gen_features, real_features.detach())
+
+        # Total loss
+        loss_G = loss_content + 1e-3 * loss_GAN
+        loss_G.backward()
+        optimizer_G.step()
+
+        return loss_G
+
+    def get_generate_loss(self, discriminator, gen_hr, images_h, real_labels):
+        with torch.no_grad():
+            # Adversarial loss
+            loss_GAN = self.criterion_GAN(discriminator(gen_hr), real_labels)
+
+            # Content loss
+            gen_features = self.feature_extractor(gen_hr)
+            real_features = self.feature_extractor(images_h)
+            loss_content = self.criterion_content(gen_features, real_features.detach())
+
+            # Total loss
+            loss_G = loss_content + 1e-3 * loss_GAN
+            return loss_G
+
+    def train_discriminator(self, optimizer_D, discriminator, gen_hr, images_h, real_labels, fake_labels):
+        optimizer_D.zero_grad()
+
+        # Loss of real and fake images
+        loss_real = self.criterion_GAN(discriminator(images_h), real_labels)
+        loss_fake = self.criterion_GAN(discriminator(gen_hr.detach()), fake_labels)
+
+        # Total loss
+        loss_D = (loss_real + loss_fake) / 2
+        loss_D.backward()
+        optimizer_D.step()
+
+        return loss_D
+
+    def get_disc_loss(self, discriminator, gen_hr, images_h, real_labels, fake_labels):
+        with torch.no_grad():
+            # Loss of real and fake images
+            loss_real = self.criterion_GAN(discriminator(images_h), real_labels)
+            loss_fake = self.criterion_GAN(discriminator(gen_hr.detach()), fake_labels)
+
+            # Total loss
+            loss_D = (loss_real + loss_fake) / 2
+
+            return loss_D
 
 
 if __name__ == '__main__':
