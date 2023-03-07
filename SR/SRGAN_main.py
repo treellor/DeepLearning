@@ -12,20 +12,18 @@
      2.…………
 """
 import os
-import numpy as np
 import argparse
 
 import torch
 import torch.nn as nn
-from torch.autograd import Variable
 from torch.utils.data import DataLoader
 from torchvision.utils import save_image, make_grid
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 
-from data_read import ImageDatasetHighLow
+from data_read import ImageDatasetHighLow,ImageDatasetCrop
 from SRGAN_models import GeneratorResNet, DiscriminatorNet, FeatureExtractor
-from common import save_model, load_model, calc_psnr, AverageMeter
+from common import save_model, load_model, calc_psnr, AverageMeter,image_show
 
 
 def train(opt):
@@ -37,9 +35,10 @@ def train(opt):
 
     # img_shape = (opt.hr_channels, opt.hr_height, opt.hr_width)
     # 读取数据
-    dataset_high = os.path.join(opt.data_folder, r"high")
-    dataset_low = os.path.join(opt.data_folder, r"low")
-    dataset = ImageDatasetHighLow(dataset_high, dataset_low)
+    # dataset_high = os.path.join(opt.data_folder, r"high")
+    # dataset_low = os.path.join(opt.data_folder, r"low")
+    # dataset = ImageDatasetHighLow(dataset_high, dataset_low)
+    dataset = ImageDatasetCrop(opt.data_folder,  opt.hr_height, opt.hr_width, scale_factor=4)
 
     img_shape = tuple(dataset[0]['hr'].shape)
 
@@ -80,8 +79,6 @@ def train(opt):
     show_image_hr = torch.stack([show_data1["hr"], show_data2["hr"], show_data3["hr"], show_data4["hr"]], 0).to(device)
     show_image_lr = torch.stack([show_data1["lr"], show_data2["lr"], show_data3["lr"], show_data4["lr"]], 0).to(device)
 
-
-    Tensor = torch.cuda.FloatTensor if torch.cuda.is_available() else torch.Tensor
     train_gen_losses, train_disc_losses, train_psnr_all = [], [], []
     val_gen_losses, val_disc_losses, val_psnr_all = [], [], []
 
@@ -141,7 +138,7 @@ def train(opt):
             loss_fake = criterion_GAN(discriminator(gen_hr.detach()), fake_labels)
 
             # Total loss
-            loss_D = (loss_real + loss_fake) / 2
+            loss_D = 1- loss_real + loss_fake
             loss_D.backward()
             optimizer_D.step()
 
@@ -190,7 +187,7 @@ def train(opt):
                 loss_real = criterion_GAN(discriminator(img_hr), valid)
                 loss_fake = criterion_GAN(discriminator(gen_hr.detach()), fake)
                 # Total loss
-                loss_D = (loss_real + loss_fake) / 2
+                loss_D = 1 - loss_real + loss_fake
 
                 val_psnr = calc_psnr(gen_hr.detach(), img_hr)
 
@@ -205,6 +202,7 @@ def train(opt):
         # Save image grid with up_sampling inputs and SRGAN outputs
         if epoch + 1 in save_epoch:
             current_epoch = epoch + 1
+
             generator.eval()
             gen_hr = generator(show_image_lr)
             img_lr = nn.functional.interpolate(show_image_lr, scale_factor=opt.scale_factor)
@@ -214,6 +212,9 @@ def train(opt):
 
             img_grid = torch.cat((img_hr, img_lr, gen_hr), -1)
             save_image(img_grid, os.path.join(save_folder_image, f"epoch_{current_epoch}.png"), normalize=False)
+
+            #image_show(img_grid.cpu())
+
             # Save model checkpoints
             save_model(os.path.join(save_folder_model, f"epoch_{current_epoch}_generator.pth"),
                        generator, optimizer_G, current_epoch)
@@ -308,20 +309,22 @@ def parse_args():
 
 if __name__ == '__main__':
 
-    is_train = False
+    is_train = True
 
     if is_train:
         para = parse_args()
-        para.data_folder = '../data/coco_sub'
+        #para.data_folder = '../data/coco_sub'
+        para.data_folder = '../data/DIV2K_train_LR_x8'
+
         para.save_folder = r"./working/"
-        para.img_w = 256
-        para.img_h = 256
+        para.hr_height = 160
+        para.hr_width = 160
         para.scale_factor = 4
-        para.epochs = 10
+        para.epochs = 1
         # para.save_epoch = set(range(1, 100, 20))
         para.load_models = True
-        para.load_models_path_gen = r"./working/SRGAN/models/epoch_12_generator.pth"
-        para.load_models_path_dis = r"./working/SRGAN/models/epoch_12_discriminator.pth"
+        para.load_models_path_gen = r"./working/SRGAN/models/epoch_60_generator.pth"
+        para.load_models_path_dis = r"./working/SRGAN/models/epoch_60_discriminator.pth"
 
         train(para)
 

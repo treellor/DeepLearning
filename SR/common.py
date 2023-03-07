@@ -11,10 +11,11 @@
        Modification:
      2.…………
 """
-import torch
+
 import os
 import torchvision
 from PIL import Image
+import torch
 from torchvision.utils import make_grid
 from matplotlib import pyplot as plt
 
@@ -88,3 +89,13 @@ def save_image_train(image_hr, image_lr, image_new, save_folder, epoch_num="Last
         plt.imshow(img)
         plt.title('   H                           L                        Gen Image')
         plt.show()
+
+
+def image_show(imgs):
+    # 将tensor转换为numpy数组
+    image_np = imgs.cpu().numpy()
+    # 调整颜色通道的顺序
+    image_np = image_np.transpose((1, 2, 0))
+    # 显示图像
+    plt.imshow(image_np)
+    plt.show()

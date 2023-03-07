@@ -14,6 +14,7 @@
 import torch
 import torch.nn as nn
 from torchvision.models import vgg19, VGG19_Weights
+from math import log
 
 
 class FeatureExtractor(nn.Module):
@@ -31,10 +32,10 @@ class ResidualBlock(nn.Module):
         super(ResidualBlock, self).__init__()
         self.layer = nn.Sequential(
             nn.Conv2d(in_channels, in_channels, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(in_channels, 0.8),
+            nn.BatchNorm2d(in_channels),
             nn.PReLU(),
             nn.Conv2d(in_channels, in_channels, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(in_channels, 0.8)
+            nn.BatchNorm2d(in_channels)
         )
 
     def forward(self, x0):
@@ -60,11 +61,12 @@ class GeneratorResNet(nn.Module):
         # Second conv layer post residual blocks
         self.conv2 = nn.Sequential(
             nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(64, 0.8)
+            nn.BatchNorm2d(64)
         )
         # Up_Sampling layers
         block = []
-        for _ in range(scale_factor // 2):
+        upsample_block_num = int(log(scale_factor, 2))
+        for _ in range(upsample_block_num):
             block += [
                 nn.Conv2d(64, 256, 3, stride=1, padding=1),
                 nn.PixelShuffle(upscale_factor=2),
@@ -95,8 +97,9 @@ class DiscriminatorNet(nn.Module):
         self.input_shape = input_shape
         in_channels, in_height, in_width = self.input_shape
         patch_h, patch_w = int(in_height / 2 ** 4), int(in_width / 2 ** 4)
-        self.output_shape = (1, patch_h, patch_w)
-        #self.output_shape = (1, 1, 1)
+        # self.output_shape = (1, patch_h, patch_w)
+        self.output_shape = (1, 1, 1)
+
         def discriminator_block(in_channel, out_channels, first_block=False):
             block_layers = [nn.Conv2d(in_channel, out_channels, kernel_size=3, stride=1, padding=1)]
             if not first_block:
@@ -113,22 +116,21 @@ class DiscriminatorNet(nn.Module):
             layers.extend(discriminator_block(in_filters, out_filters, first_block=(i == 0)))
             in_filters = out_filters
 
-        layers.append(nn.Conv2d(in_filters, 1, kernel_size=3, stride=1, padding=1))
+        # layers.append(nn.Conv2d(in_filters, 1, kernel_size=3, stride=1, padding=1))
 
         self.model = nn.Sequential(*layers)
 
-        # self.dense = nn.Sequential(
-        #     nn.AdaptiveAvgPool2d(1),
-        #     nn.Conv2d(512, 1024, 1),
-        #     nn.LeakyReLU(inplace=True),
-        #     nn.Conv2d(1024, 1, 1),
-        #     nn.Sigmoid()
-        # )
+        self.dense = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            nn.Conv2d(512, 1024, 1),
+            nn.LeakyReLU(inplace=True),
+            nn.Conv2d(1024, 1, 1),
+            nn.Sigmoid()
+        )
 
     def forward(self, x):
-        x = self.model(x)
-       # x = self.dense(x)
-        return x
+        out = self.dense(self.model(x))
+        return out
 
 
 if __name__ == '__main__':

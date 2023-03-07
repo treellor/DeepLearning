@@ -14,6 +14,7 @@
 import torch
 import torch.nn as nn
 from torchvision.models import vgg19, VGG19_Weights
+from math import log
 
 
 class FeatureExtractor(nn.Module):
@@ -83,7 +84,9 @@ class GeneratorRRDB(nn.Module):
         self.conv2 = nn.Conv2d(filters, filters, kernel_size=3, stride=1, padding=1)
 
         up_sample_layers = []
-        for _ in range(scale_factor // 2):
+
+        up_sample_block_num = int(log(scale_factor, 2))
+        for _ in range(up_sample_block_num):
             up_sample_layers += [
                 nn.Conv2d(filters, filters * 4, kernel_size=3, stride=1, padding=1),
                 nn.LeakyReLU(),
@@ -128,22 +131,22 @@ class Discriminator(nn.Module):
             return layer
 
         self.down = nn.Sequential(
-            discriminator_block(64, 64,   kernel_size=3,  stride=2, padding=1),
-            discriminator_block(64, 128,  kernel_size=3, stride=1, padding=1),
-            discriminator_block(128, 128, kernel_size=3,  stride=2, padding=1),
+            discriminator_block(64, 64, kernel_size=3, stride=2, padding=1),
+            discriminator_block(64, 128, kernel_size=3, stride=1, padding=1),
+            discriminator_block(128, 128, kernel_size=3, stride=2, padding=1),
             discriminator_block(128, 256, kernel_size=3, stride=1, padding=1),
-            discriminator_block(256, 256, kernel_size=3,  stride=2, padding=1),
-            discriminator_block(256, 512, kernel_size=3,  stride=1, padding=1),
+            discriminator_block(256, 256, kernel_size=3, stride=2, padding=1),
+            discriminator_block(256, 512, kernel_size=3, stride=1, padding=1),
             discriminator_block(512, 512, kernel_size=3, stride=2, padding=1),
         )
-        self.dense = nn.Conv2d(512, 1, kernel_size=3, stride=1, padding=1)
-        # self.dense = nn.Sequential(
-        #     nn.AdaptiveAvgPool2d(1),
-        #     nn.Conv2d(512, 1024, 1),
-        #     nn.LeakyReLU(inplace=True),
-        #     nn.Conv2d(1024, 1, 1),
-        #     nn.Sigmoid()
-        # )
+        # self.dense = nn.Conv2d(512, 1, kernel_size=3, stride=1, padding=1)
+        self.dense = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            nn.Conv2d(512, 1024, 1),
+            nn.LeakyReLU(inplace=True),
+            nn.Conv2d(1024, 1, 1),
+            nn.Sigmoid()
+        )
 
     def forward(self, x):
         x = self.conv1(x)

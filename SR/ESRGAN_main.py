@@ -21,9 +21,9 @@ from torchvision.utils import save_image, make_grid
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 
-from data_read import ImageDatasetHighLow
+from data_read import ImageDatasetHighLow, ImageDatasetResize
 from ESRGAN_model import GeneratorRRDB, Discriminator, FeatureExtractor
-from common import save_model, load_model, AverageMeter, calc_psnr
+from common import save_model, load_model, AverageMeter, calc_psnr, image_show
 
 
 def train(opt):
@@ -34,10 +34,10 @@ def train(opt):
     os.makedirs(save_folder_model, exist_ok=True)
 
     # 读取数据
-    dataset_high = os.path.join(opt.data_folder, r"high")
-    dataset_low = os.path.join(opt.data_folder, r"low")
-    dataset = ImageDatasetHighLow(dataset_high, dataset_low)
-
+    # dataset_high = os.path.join(opt.data_folder, r"high")
+    # dataset_low = os.path.join(opt.data_folder, r"low")
+    # dataset = ImageDatasetHighLow(dataset_high, dataset_low)
+    dataset = ImageDatasetResize(opt.data_folder, img_H=opt.hr_height, img_W=opt.hr_width, scale_factor=4)
     img_shape = tuple(dataset[0]['hr'].shape)
     # img_shape = (dataset[0]['hr'].shape[0], opt.hr_height, opt.hr_width)
 
@@ -312,12 +312,12 @@ if __name__ == '__main__':
 
     if is_train:
         para = parse_args()
-        para.data_folder = '../data/coco_sub/'
+        para.data_folder = '../data/DIV2K_train_LR_x8'
         para.save_folder = r"./working/"
-        para.img_w = 256
-        para.img_h = 256
+        para.hr_height = 160
+        para.hr_width = 256
         para.scale_factor = 4
-        para.epochs = 20
+        para.epochs = 2
         para.warm_epochs = 0
         # para.save_epoch = set(range(1, 100, 20))
         para.load_models = False
@@ -328,10 +328,10 @@ if __name__ == '__main__':
 
     else:
         para = parse_args()
-        para.folder_data = '../data/coco_sub'
+        para.data_folder = '../data/coco_sub'
         para.save_folder = r"./working/"
-        para.img_w = 256
-        para.img_h = 256
+        para.hr_height = 256
+        para.hr_width = 256
         para.scale_factor = 4
         para.batch_size = 4
 

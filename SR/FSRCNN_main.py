@@ -198,19 +198,19 @@ def parse_args():
 
 if __name__ == '__main__':
 
-    is_train = False
+    is_train = True
 
     if is_train:
         para = parse_args()
-        para.folder_data = '../data/T91'
+        para.folder_data = '../data/DIV2K_train_LR_x8'
         para.save_folder = r"./working/"
         para.img_w = 160
         para.img_h = 160
         para.scale_factor = 4
-        para.epochs = 200
+        para.epochs = 1200
         # para.save_epoch = set(range(1, 100, 20))
         para.load_models = True
-        para.load_models_path = r"./working/FSRCNN/models/epoch_200_model.pth"
+        para.load_models_path = r"./working/FSRCNN/models/epoch_800_model.pth"
 
         train(para)
 

@@ -25,7 +25,7 @@ from torchvision.utils import save_image, make_grid
 
 from data_read import ImageDatasetCrop
 from SRCNN_models import SRCNN
-from common import save_model, load_model, calc_psnr, AverageMeter
+from common import save_model, load_model, calc_psnr, AverageMeter, image_show
 
 
 def train(opt):
@@ -122,6 +122,7 @@ def train(opt):
             img_grid = torch.cat((img_hr, img_lr, gen_hr), -1)
             save_image(img_grid, os.path.join(save_folder_image, f"epoch_{epoch + 1}.png"), normalize=False)
 
+            image_show( img_grid )
             # 保存最新的参数和损失最小的参数
             save_model(os.path.join(save_folder_model, f"epoch_{epoch + 1 }_model.pth"), srcnn,
                        optimizer, epoch + 1)
@@ -192,18 +193,18 @@ def parse_args():
 
 if __name__ == '__main__':
 
-    is_train = False
+    is_train = True
 
     if is_train:
         para = parse_args()
-        para.data_folder = '../data/T91'
+        para.data_folder = '../data/DIV2K_train_LR_x8'
         para.save_folder = r"./working/"
         para.img_w = 160
         para.img_h = 160
         para.scale_factor = 4
         para.epochs = 50
         # para.save_epoch = set(range(1, 100, 20))
-        para.load_models = True
+        para.load_models = False
         para.load_models_path = r"./working/SRCNN/models/epoch_150_model.pth"
         train(para)
     else:
