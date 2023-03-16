@@ -22,9 +22,9 @@ from tqdm import tqdm
 from matplotlib import pyplot as plt
 from torchvision.utils import make_grid, save_image
 
-from data_read import ImageDatasetCrop
+from utils.data_read import ImageDatasetCrop
 from FSRCNN_models import FSRCNN
-from common import save_model, load_model, calc_psnr, AverageMeter
+from utils.utils import save_model, load_model, calc_psnr, AverageMeter
 
 
 def train(opt):

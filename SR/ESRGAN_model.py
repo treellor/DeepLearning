@@ -30,9 +30,9 @@ class FeatureExtractor(nn.Module):
         return self.vgg19_54(img)
 
 
-class DenseBlock(nn.Module):
+class ResidualDenseBlock(nn.Module):
     def __init__(self, in_channels, out_channels=32, res_scale=0.2):
-        super(DenseBlock, self).__init__()
+        super(ResidualDenseBlock, self).__init__()
 
         self.res_scale = res_scale
 
@@ -55,14 +55,14 @@ class DenseBlock(nn.Module):
         return out5.mul(self.res_scale) + x
 
 
-class ResidualDenseBlock(nn.Module):
+class RRDB(nn.Module):
     def __init__(self, in_channels, out_channels=32, res_scale=0.2):
-        super(ResidualDenseBlock, self).__init__()
+        super(RRDB, self).__init__()
         self.res_scale = res_scale
 
-        self.dense_blocks = nn.Sequential(DenseBlock(in_channels, out_channels, res_scale),
-                                          DenseBlock(in_channels, out_channels, res_scale),
-                                          DenseBlock(in_channels, out_channels, res_scale)
+        self.dense_blocks = nn.Sequential(ResidualDenseBlock(in_channels, out_channels, res_scale),
+                                          ResidualDenseBlock(in_channels, out_channels, res_scale),
+                                          ResidualDenseBlock(in_channels, out_channels, res_scale)
                                           )
 
     def forward(self, x):
@@ -78,7 +78,7 @@ class GeneratorRRDB(nn.Module):
 
         basic_block_layer = []
         for _ in range(n_basic_block):
-            basic_block_layer += [ResidualDenseBlock(in_channels=filters, out_channels=filters)]
+            basic_block_layer += [RRDB(in_channels=filters, out_channels=filters)]
         self.basic_block = nn.Sequential(*basic_block_layer)
 
         self.conv2 = nn.Conv2d(filters, filters, kernel_size=3, stride=1, padding=1)

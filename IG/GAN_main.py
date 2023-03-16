@@ -36,8 +36,8 @@ from torchvision.utils import save_image
 from tqdm import tqdm
 
 from GAN_models import Generator, Discriminator
-from data_read import ImageDatasetCropSingle, ImageDatasetResizeSingle
-from common import load_model, save_model
+from utils.data_read import ImageDatasetResizeSingle
+from utils.utils import load_model, save_model
 
 
 def train(opt):
@@ -180,7 +180,7 @@ def parse_args():
 
 if __name__ == '__main__':
 
-    is_train = False
+    is_train = True
     if is_train:
         para = parse_args()
         para.data_folder = '../data/face'
@@ -192,7 +192,7 @@ if __name__ == '__main__':
         para.batch_size = 64
 
         # para.save_epoch = set(range(1, 100, 10))
-        para.load_models = True
+        para.load_models = False
         para.load_models_path_gen = r"./working/GAN/models/epoch_100_generator.pth"
         para.load_models_path_dis = r"./working/GAN/models/epoch_100_discriminator.pth"
         train(para)

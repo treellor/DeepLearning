@@ -14,149 +14,115 @@
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
-# from torch.nn.utils import spectral_norm
-
+from math import log
+from torchvision.models import vgg19, VGG19_Weights
 
 
 class ResidualDenseBlock(nn.Module):
-    """Residual Dense Block.
-
-    Used in RRDB block in ESRGAN.
-
-    Args:
-        num_feat (int): Channel number of intermediate features.
-        num_grow_ch (int): Channels for each growth.
-    """
-
-    def __init__(self, num_feat=64, num_grow_ch=32):
+    def __init__(self, in_channels, out_channels=32, res_scale=0.2):
         super(ResidualDenseBlock, self).__init__()
-        self.conv1 = nn.Conv2d(num_feat, num_grow_ch, 3, 1, 1)
-        self.conv2 = nn.Conv2d(num_feat + num_grow_ch, num_grow_ch, 3, 1, 1)
-        self.conv3 = nn.Conv2d(num_feat + 2 * num_grow_ch, num_grow_ch, 3, 1, 1)
-        self.conv4 = nn.Conv2d(num_feat + 3 * num_grow_ch, num_grow_ch, 3, 1, 1)
-        self.conv5 = nn.Conv2d(num_feat + 4 * num_grow_ch, num_feat, 3, 1, 1)
 
-        self.lrelu = nn.LeakyReLU(negative_slope=0.2, inplace=True)
+        self.res_scale = res_scale
 
-        # initialization
-        default_init_weights([self.conv1, self.conv2, self.conv3, self.conv4, self.conv5], 0.1)
+        self.layer1 = nn.Sequential(nn.Conv2d(in_channels + 0 * out_channels, out_channels, 3, padding=1, bias=True),
+                                    nn.LeakyReLU())
+        self.layer2 = nn.Sequential(nn.Conv2d(in_channels + 1 * out_channels, out_channels, 3, padding=1, bias=True),
+                                    nn.LeakyReLU())
+        self.layer3 = nn.Sequential(nn.Conv2d(in_channels + 2 * out_channels, out_channels, 3, padding=1, bias=True),
+                                    nn.LeakyReLU())
+        self.layer4 = nn.Sequential(nn.Conv2d(in_channels + 3 * out_channels, out_channels, 3, padding=1, bias=True),
+                                    nn.LeakyReLU())
+        self.layer5 = nn.Sequential(nn.Conv2d(in_channels + 4 * out_channels, in_channels, 3, padding=1, bias=True))
 
     def forward(self, x):
-        x1 = self.lrelu(self.conv1(x))
-        x2 = self.lrelu(self.conv2(torch.cat((x, x1), 1)))
-        x3 = self.lrelu(self.conv3(torch.cat((x, x1, x2), 1)))
-        x4 = self.lrelu(self.conv4(torch.cat((x, x1, x2, x3), 1)))
-        x5 = self.conv5(torch.cat((x, x1, x2, x3, x4), 1))
-        # Emperically, we use 0.2 to scale the residual for better performance
-        return x5 * 0.2 + x
+        out1 = self.layer1(x)
+        out2 = self.layer2(torch.cat((x, out1), 1))
+        out3 = self.layer3(torch.cat((x, out1, out2), 1))
+        out4 = self.layer4(torch.cat((x, out1, out2, out3), 1))
+        out5 = self.layer5(torch.cat((x, out1, out2, out3, out4), 1))
+        return out5.mul(self.res_scale) + x
 
 
 class RRDB(nn.Module):
-    """Residual in Residual Dense Block.
-
-    Used in RRDB-Net in ESRGAN.
-
-    Args:
-        num_feat (int): Channel number of intermediate features.
-        num_grow_ch (int): Channels for each growth.
-    """
-
-    def __init__(self, num_feat, num_grow_ch=32):
+    def __init__(self, in_channels, out_channels=32, res_scale=0.2):
         super(RRDB, self).__init__()
-        self.rdb1 = ResidualDenseBlock(num_feat, num_grow_ch)
-        self.rdb2 = ResidualDenseBlock(num_feat, num_grow_ch)
-        self.rdb3 = ResidualDenseBlock(num_feat, num_grow_ch)
+        self.res_scale = res_scale
+
+        self.dense_blocks = nn.Sequential(ResidualDenseBlock(in_channels, out_channels, res_scale),
+                                          ResidualDenseBlock(in_channels, out_channels, res_scale),
+                                          ResidualDenseBlock(in_channels, out_channels, res_scale)
+                                          )
 
     def forward(self, x):
-        out = self.rdb1(x)
-        out = self.rdb2(out)
-        out = self.rdb3(out)
-        # Emperically, we use 0.2 to scale the residual for better performance
-        return out * 0.2 + x
+        out = self.dense_blocks(x)
+        return out.mul(self.res_scale) + x
 
 
-class RRDBNet(nn.Module):
-    """Networks consisting of Residual in Residual Dense Block, which is used
-    in ESRGAN.
+class GeneratorRRDB(nn.Module):
+    def __init__(self, in_channels, filters=64, scale_factor=4, n_basic_block=23):
+        super(GeneratorRRDB, self).__init__()
 
-    ESRGAN: Enhanced Super-Resolution Generative Adversarial Networks.
+        self.conv1 = nn.Conv2d(in_channels, filters, kernel_size=3, stride=1, padding=1)
 
-    We extend ESRGAN for scale x2 and scale x1.
-    Note: This is one option for scale 1, scale 2 in RRDBNet.
-    We first employ the pixel-unshuffle (an inverse operation of pixelshuffle to reduce the spatial size
-    and enlarge the channel size before feeding inputs into the main ESRGAN architecture.
+        basic_block_layer = []
+        for _ in range(n_basic_block):
+            basic_block_layer += [RRDB(in_channels=filters, out_channels=filters)]
+        self.basic_block = nn.Sequential(*basic_block_layer)
 
-    Args:
-        num_in_ch (int): Channel number of inputs.
-        num_out_ch (int): Channel number of outputs.
-        num_feat (int): Channel number of intermediate features.
-            Default: 64
-        num_block (int): Block number in the trunk network. Defaults: 23
-        num_grow_ch (int): Channels for each growth. Default: 32.
-    """
+        self.conv2 = nn.Conv2d(filters, filters, kernel_size=3, stride=1, padding=1)
 
-    def __init__(self, num_in_ch, num_out_ch, scale=4, num_feat=64, num_block=23, num_grow_ch=32):
-        super(RRDBNet, self).__init__()
-        self.scale = scale
-        if scale == 2:
-            num_in_ch = num_in_ch * 4
-        elif scale == 1:
-            num_in_ch = num_in_ch * 16
-        self.conv_first = nn.Conv2d(num_in_ch, num_feat, 3, 1, 1)
-        self.body = make_layer(RRDB, num_block, num_feat=num_feat, num_grow_ch=num_grow_ch)
-        self.conv_body = nn.Conv2d(num_feat, num_feat, 3, 1, 1)
-        # upsample
-        self.conv_up1 = nn.Conv2d(num_feat, num_feat, 3, 1, 1)
-        self.conv_up2 = nn.Conv2d(num_feat, num_feat, 3, 1, 1)
-        if scale == 8:
-            self.conv_up3 = nn.Conv2d(num_feat, num_feat, 3, 1, 1)
-        self.conv_hr = nn.Conv2d(num_feat, num_feat, 3, 1, 1)
-        self.conv_last = nn.Conv2d(num_feat, num_out_ch, 3, 1, 1)
+        up_sample_layers = []
 
-        self.lrelu = nn.LeakyReLU(negative_slope=0.2, inplace=True)
+        up_sample_block_num = int(log(scale_factor, 2))
+        for _ in range(up_sample_block_num):
+            up_sample_layers += [
+                nn.Conv2d(filters, filters * 4, kernel_size=3, stride=1, padding=1),
+                nn.LeakyReLU(),
+                nn.PixelShuffle(upscale_factor=2),
+            ]
+        self.up_sampling = nn.Sequential(*up_sample_layers)
+
+        self.conv3 = nn.Sequential(
+            nn.Conv2d(filters, filters, kernel_size=3, stride=1, padding=1),
+            nn.LeakyReLU(),
+            nn.Conv2d(filters, in_channels, kernel_size=3, stride=1, padding=1),
+        )
 
     def forward(self, x):
-        if self.scale == 2:
-            feat = pixel_unshuffle(x, scale=2)
-        elif self.scale == 1:
-            feat = pixel_unshuffle(x, scale=4)
-        else:
-            feat = x
-        feat = self.conv_first(feat)
-        body_feat = self.conv_body(self.body(feat))
-        feat = feat + body_feat
-        # upsample
-        feat = self.lrelu(self.conv_up1(F.interpolate(feat, scale_factor=2, mode='nearest')))
-        feat = self.lrelu(self.conv_up2(F.interpolate(feat, scale_factor=2, mode='nearest')))
-        if self.scale == 8:
-            feat = self.lrelu(self.conv_up3(F.interpolate(feat, scale_factor=2, mode='nearest')))
-        out = self.conv_last(self.lrelu(self.conv_hr(feat)))
+        out1 = self.conv1(x)
+        out2 = self.basic_block(out1)
+        out3 = self.conv2(out2)
+        out = self.up_sampling(out1 + out3)
+        out = self.conv3(out)
         return out
 
 
 
-@ARCH_REGISTRY.register()
 class UNetDiscriminatorSN(nn.Module):
     """Defines a U-Net discriminator with spectral normalization (SN)"""
 
-    def __init__(self, num_in_ch, num_feat=64, skip_connection=True):
+    def __init__(self, input_shape, num_feat=64, skip_connection=True):
         super(UNetDiscriminatorSN, self).__init__()
+
+        img_channels, img_height, img_width = input_shape
+        self.output_shape = (1, img_height, img_width)
+
         self.skip_connection = skip_connection
-        norm = spectral_norm
+        spectral_norm = torch.nn.utils.spectral_norm
 
-        self.conv0 = nn.Conv2d(num_in_ch, num_feat, kernel_size=3, stride=1, padding=1)
+        self.conv0 = nn.Conv2d(img_channels, num_feat, kernel_size=3, stride=1, padding=1)
 
-        self.conv1 = norm(nn.Conv2d(num_feat, num_feat * 2, 4, 2, 1, bias=False))
-        self.conv2 = norm(nn.Conv2d(num_feat * 2, num_feat * 4, 4, 2, 1, bias=False))
-        self.conv3 = norm(nn.Conv2d(num_feat * 4, num_feat * 8, 4, 2, 1, bias=False))
-        # upsample
-        self.conv4 = norm(nn.Conv2d(num_feat * 8, num_feat * 4, 3, 1, 1, bias=False))
-        self.conv5 = norm(nn.Conv2d(num_feat * 4, num_feat * 2, 3, 1, 1, bias=False))
-        self.conv6 = norm(nn.Conv2d(num_feat * 2, num_feat, 3, 1, 1, bias=False))
+        self.conv1 = spectral_norm(nn.Conv2d(num_feat, num_feat * 2, 4, 2, 1, bias=False))
+        self.conv2 = spectral_norm(nn.Conv2d(num_feat * 2, num_feat * 4, 4, 2, 1, bias=False))
+        self.conv3 = spectral_norm(nn.Conv2d(num_feat * 4, num_feat * 8, 4, 2, 1, bias=False))
+        # up_sample
+        self.conv4 = spectral_norm(nn.Conv2d(num_feat * 8, num_feat * 4, 3, 1, 1, bias=False))
+        self.conv5 = spectral_norm(nn.Conv2d(num_feat * 4, num_feat * 2, 3, 1, 1, bias=False))
+        self.conv6 = spectral_norm(nn.Conv2d(num_feat * 2, num_feat, 3, 1, 1, bias=False))
 
         # extra
-        self.conv7 = norm(nn.Conv2d(num_feat, num_feat, 3, 1, 1, bias=False))
-        self.conv8 = norm(nn.Conv2d(num_feat, num_feat, 3, 1, 1, bias=False))
+        self.conv7 = spectral_norm(nn.Conv2d(num_feat, num_feat, 3, 1, 1, bias=False))
+        self.conv8 = spectral_norm(nn.Conv2d(num_feat, num_feat, 3, 1, 1, bias=False))
 
         self.conv9 = nn.Conv2d(num_feat, 1, 3, 1, 1)
 
@@ -189,3 +155,108 @@ class UNetDiscriminatorSN(nn.Module):
         out = self.conv9(out)
 
         return out
+
+
+class FeatureExtractor(nn.Module):
+    def __init__(self):
+        super(FeatureExtractor, self).__init__()
+        vgg19_model = vgg19(weights=VGG19_Weights.DEFAULT)
+        vgg19_54 = nn.Sequential(*list(vgg19_model.features.children())[:35])
+        for param in vgg19_54.parameters():
+            param.requires_grad = False
+        self.vgg19_54 = vgg19_54
+
+    def forward(self, img):
+        return self.vgg19_54(img)
+
+
+class TrainerRealESRGAN:
+    def __init__(self, device):
+        # Set feature extractor to inference mode
+        self.feature_extractor = FeatureExtractor().to(device)
+        self.feature_extractor.eval()
+
+        # Losses
+        self.criterion_GAN = torch.nn.BCEWithLogitsLoss().to(device)
+        self.criterion_content = torch.nn.L1Loss().to(device)
+        self.criterion_pixel = torch.nn.L1Loss().to(device)
+
+    def pre_train_generator(self, optimizer_G, img_gen, img_hr):
+        optimizer_G.zero_grad()
+        # Content loss
+        loss_pixel = self.criterion_pixel(img_gen, img_hr)
+        loss_pixel.backward()
+        optimizer_G.step()
+
+    def train_generator(self, optimizer_G, discriminator, img_gen, img_hr, real_labels):
+        optimizer_G.zero_grad()
+        # pixel loss
+        loss_pixel = self.criterion_pixel(img_gen, img_hr)
+
+        # Adversarial loss (relativistic average GAN)
+        # Extract validity predictions from discriminator
+        real_score = discriminator(img_hr).detach()
+        fake_score = discriminator(img_gen)
+        loss_GAN = self.criterion_GAN(fake_score - real_score.mean(0, keepdim=True), real_labels)
+
+        # Content loss
+        gen_features = self.feature_extractor(img_gen).detach()
+        real_features = self.feature_extractor(img_hr)
+        loss_content = self.criterion_content(gen_features, real_features)
+
+        # Total generator loss
+        loss_G = loss_content + 5e-3 * loss_GAN + 1e-2 * loss_pixel
+        loss_G.backward()
+
+        optimizer_G.step()
+
+        return loss_G
+
+    def get_generate_loss(self, discriminator, img_gen, img_hr, real_labels):
+        with torch.no_grad():
+            loss_pixel = self.criterion_pixel(img_gen, img_hr)
+
+            # Adversarial loss (relativistic average GAN)
+            # Extract validity predictions from discriminator
+            real_score = discriminator(img_hr).detach()
+            fake_score = discriminator(img_gen)
+            loss_GAN = self.criterion_GAN(fake_score - real_score.mean(0, keepdim=True), real_labels)
+
+            # Content loss
+            gen_features = self.feature_extractor(img_gen).detach()
+            real_features = self.feature_extractor(img_hr)
+            loss_content = self.criterion_content(gen_features, real_features)
+
+            # Total generator loss
+            loss_G = loss_content + 5e-3 * loss_GAN + 1e-2 * loss_pixel
+            return loss_G
+
+    def train_discriminator(self, optimizer_D, discriminator, img_gen, img_hr, real_labels, fake_labels):
+        optimizer_D.zero_grad()
+
+        real_score = discriminator(img_hr)
+        fake_score = discriminator(img_gen.detach())
+
+        # Adversarial loss for real and fake images (relativistic average GAN)
+        loss_real = self.criterion_GAN(real_score - fake_score.mean(0, keepdim=True), real_labels)
+        loss_fake = self.criterion_GAN(fake_score - real_score.mean(0, keepdim=True), fake_labels)
+
+        loss_D = (loss_real + loss_fake) / 2
+        loss_D.backward()
+        optimizer_D.step()
+
+        return loss_D
+
+    def get_disc_loss(self, discriminator, img_gen, img_hr, real_labels, fake_labels):
+        with torch.no_grad():
+            real_score = discriminator(img_hr)
+            fake_score = discriminator(img_gen.detach())
+
+            # Adversarial loss for real and fake images (relativistic average GAN)
+            loss_real = self.criterion_GAN(real_score - fake_score.mean(0, keepdim=True), real_labels)
+            loss_fake = self.criterion_GAN(fake_score - real_score.mean(0, keepdim=True), fake_labels)
+
+            # Total loss
+            loss_D = (loss_real + loss_fake) / 2
+
+            return loss_D

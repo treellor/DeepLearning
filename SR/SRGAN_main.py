@@ -21,9 +21,9 @@ from torchvision.utils import save_image, make_grid
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 
-from data_read import ImageDatasetCrop
+from utils.data_read import ImageDatasetCrop
 from SRGAN_models import GeneratorResNet, DiscriminatorNet, TrainerSRGAN
-from common import save_model, load_model, calc_psnr, AverageMeter, image_show
+from utils.utils import save_model, load_model, calc_psnr, AverageMeter
 
 
 def train(opt):
