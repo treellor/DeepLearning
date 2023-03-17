@@ -15,41 +15,48 @@
 import torch.nn as nn
 import numpy as np
 
-import torch
-import torch.nn as nn
+
+class Generator(nn.Module):
+    def __init__(self, seq_length=128, img_shape=(3, 64, 64)):
+        super(Generator, self).__init__()
+
+        def block(in_len, out_len, normalize=True):
+            layers = [nn.Linear(in_len, out_len)]
+            if normalize:
+                layers.append(nn.BatchNorm1d(out_len, 0.8))
+            layers.append(nn.LeakyReLU(0.2, inplace=True))
+            return layers
+
+        self.img_shape = img_shape
+        self.model = nn.Sequential(*block(seq_length, 128, normalize=False),
+                                   *block(128, 256),
+                                   *block(256, 512),
+                                   *block(512, 1024),
+                                   nn.Linear(1024, int(np.prod(self.img_shape))),
+                                   nn.Tanh()
+                                   )
+
+    def forward(self, z):
+        img = self.model(z)
+        img = img.view(img.size(0), *self.img_shape)
+        return img
 
 
-class DDPM(nn.Module):
-    def __init__(self, n_steps, num_units=128):
-        super(DDPM, self).__init__()
+class Discriminator(nn.Module):
+    def __init__(self, img_shape):
+        super(Discriminator, self).__init__()
 
-        self.linears = nn.ModuleList(
-            [
-                nn.Linear(2, num_units),
-                nn.ReLU(),
-                nn.Linear(num_units, num_units),
-                nn.ReLU(),
-                nn.Linear(num_units, num_units),
-                nn.ReLU(),
-                nn.Linear(num_units, 2),
-            ]
+        self.img_shape = img_shape
+        self.model = nn.Sequential(
+            nn.Linear(int(np.prod(img_shape)), 512),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Linear(512, 256),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Linear(256, 1),
+            nn.Sigmoid(),
         )
-        self.step_embeddings = nn.ModuleList(
-            [
-                nn.Embedding(n_steps, num_units),
-                nn.Embedding(n_steps, num_units),
-                nn.Embedding(n_steps, num_units),
-            ]
-        )
 
-    def forward(self, x, t):
-        #         x = x_0
-        for idx, embedding_layer in enumerate(self.step_embeddings):
-            t_embedding = embedding_layer(t)
-            x = self.linears[2 * idx](x)
-            x += t_embedding
-            x = self.linears[2 * idx + 1](x)
-
-        x = self.linears[-1](x)
-
-        return x
+    def forward(self, img):
+        img_flat = img.view(img.size(0), -1)
+        validity = self.model(img_flat)
+        return validity
