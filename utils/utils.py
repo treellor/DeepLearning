@@ -20,6 +20,7 @@ from torchvision.utils import make_grid
 from matplotlib import pyplot as plt
 
 
+
 class AverageMeter(object):
     def __init__(self):
         self.count = 0
@@ -39,6 +40,25 @@ class AverageMeter(object):
         self.sum += val * n
         self.count += n
         self.avg = self.sum / self.count
+
+
+
+
+from enum import Enum
+
+class NormType(Enum):
+    __doc__ = r"""
+        BN  = BatchNorm2d
+        GN  = GroupNorm
+        InN = InstanceNorm2d
+        ID  = Identity
+    """
+    BN = 1
+    GN = 2
+    InN= 3
+    ID =4
+
+
 
 
 def save_model(save_path, model, optimizer, epoch_n):

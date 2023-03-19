@@ -12,7 +12,6 @@
        Modification:
      2.…………
 """
-import torch.nn as nn
 import numpy as np
 
 import math
@@ -20,9 +19,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from torch.nn.modules.normalization import GroupNorm
 import copy
 from functools import partial
+from torch.nn.modules.normalization import GroupNorm
+
 def get_norm(norm, num_channels, num_groups):
     if norm == "in":
         return nn.InstanceNorm2d(num_channels, affine=True)
@@ -602,8 +602,6 @@ def extract(a, t, x_shape):
     b, *_ = t.shape
     out = a.gather(-1, t)
     return out.reshape(b, *((1,) * (len(x_shape) - 1)))
-
-
 
 
 
