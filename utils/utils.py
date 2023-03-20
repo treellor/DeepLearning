@@ -44,22 +44,6 @@ class AverageMeter(object):
 
 
 
-from enum import Enum
-
-class NormType(Enum):
-    __doc__ = r"""
-        BN  = BatchNorm2d
-        GN  = GroupNorm
-        InN = InstanceNorm2d
-        ID  = Identity
-    """
-    BN = 1
-    GN = 2
-    InN= 3
-    ID =4
-
-
-
 
 def save_model(save_path, model, optimizer, epoch_n):
     torch.save({"model_dict": model.state_dict(), "optimizer_dict": optimizer.state_dict(), "epoch_n": epoch_n},
@@ -119,3 +103,4 @@ def image_show(imgs):
     # 显示图像
     plt.imshow(image_np)
     plt.show()
+
