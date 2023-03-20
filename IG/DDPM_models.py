@@ -12,6 +12,7 @@
        Modification:
      2.…………
 """
+import torch.nn as nn
 import numpy as np
 
 import math
@@ -19,10 +20,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from torch.nn.modules.normalization import GroupNorm
 import copy
 from functools import partial
-from torch.nn.modules.normalization import GroupNorm
-
 def get_norm(norm, num_channels, num_groups):
     if norm == "in":
         return nn.InstanceNorm2d(num_channels, affine=True)
@@ -38,9 +38,8 @@ def get_norm(norm, num_channels, num_groups):
 
 class PositionalEmbedding(nn.Module):
     __doc__ = r"""Computes a positional embedding of timesteps.
-
     Input:
-        x: tensor of shape (N)
+        x: tensor of shape (N)
     Output:
         tensor of shape (N, dim)
     Args:
@@ -66,7 +65,6 @@ class PositionalEmbedding(nn.Module):
 
 class Downsample(nn.Module):
     __doc__ = r"""Downsamples a given tensor by a factor of 2. Uses strided convolution. Assumes even height and width.
-
     Input:
         x: tensor of shape (N, in_channels, H, W)
         time_emb: ignored
@@ -93,7 +91,6 @@ class Downsample(nn.Module):
 
 class Upsample(nn.Module):
     __doc__ = r"""Upsamples a given tensor by a factor of 2. Uses resize convolution to avoid checkerboard artifacts.
-
     Input:
         x: tensor of shape (N, in_channels, H, W)
         time_emb: ignored
@@ -118,7 +115,6 @@ class Upsample(nn.Module):
 
 class AttentionBlock(nn.Module):
     __doc__ = r"""Applies QKV self-attention with a residual connection.
-
     Input:
         x: tensor of shape (N, in_channels, H, W)
         norm (string or None): which normalization to use (instance, group, batch, or none). Default: "gn"
@@ -158,11 +154,10 @@ class AttentionBlock(nn.Module):
 
 class ResidualBlock(nn.Module):
     __doc__ = r"""Applies two conv blocks with resudual connection. Adds time and class conditioning by adding bias after first convolution.
-
     Input:
-        x: tensor of shape (N, in_channels, H, W)
-        time_emb: time embedding tensor of shape (N, time_emb_dim) or None if the block doesn't use time conditioning
-        y: classes tensor of shape (N) or None if the block doesn't use class conditioning
+        x: tensor of shape (N, in_channels, H, W)
+        time_emb: time embedding tensor of shape (N, time_emb_dim) or None if the block doesn't use time conditioning
+        y: classes tensor of shape (N) or None if the block doesn't use class conditioning
     Output:
         tensor of shape (N, out_channels, H, W)
     Args:
@@ -232,11 +227,10 @@ class ResidualBlock(nn.Module):
 
 class UNet(nn.Module):
     __doc__ = """UNet model used to estimate noise.
-
     Input:
-        x: tensor of shape (N, in_channels, H, W)
-        time_emb: time embedding tensor of shape (N, time_emb_dim) or None if the block doesn't use time conditioning
-        y: classes tensor of shape (N) or None if the block doesn't use class conditioning
+        x: tensor of shape (N, in_channels, H, W)
+        time_emb: time embedding tensor of shape (N, time_emb_dim) or None if the block doesn't use time conditioning
+        y: classes tensor of shape (N) or None if the block doesn't use class conditioning
     Output:
         tensor of shape (N, out_channels, H, W)
     Args:
@@ -421,16 +415,15 @@ class EMA():
 
 class GaussianDiffusion(nn.Module):
     __doc__ = r"""Gaussian Diffusion model. Forwarding through the module returns diffusion reversal scalar loss tensor.
-
     Input:
-        x: tensor of shape (N, img_channels, *img_size)
-        y: tensor of shape (N)
+        x: tensor of shape (N, img_channels, *img_size)
+        y: tensor of shape (N)
     Output:
         scalar loss tensor
     Args:
-        model (nn.Module): model which estimates diffusion noise
+        model (nn.Module): model which estimates diffusion noise
         img_size (tuple): image size tuple (H, W)
-        img_channels (int): number of image channels
+        img_channels (int): number of image channels
         betas (np.ndarray): numpy array of diffusion betas
         loss_type (string): loss type, "l1" or "l2"
         ema_decay (float): model weights exponential moving average decay
@@ -602,6 +595,8 @@ def extract(a, t, x_shape):
     b, *_ = t.shape
     out = a.gather(-1, t)
     return out.reshape(b, *((1,) * (len(x_shape) - 1)))
+
+
 
 
 
