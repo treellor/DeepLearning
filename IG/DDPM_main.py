@@ -181,7 +181,7 @@ def parse_args():
 
 if __name__ == '__main__':
 
-    is_train = True
+    is_train = False
     if is_train:
         para = parse_args()
         para.data_folder = '../data/face'
@@ -207,5 +207,5 @@ if __name__ == '__main__':
 
         # para.save_epoch = set(range(1, 100, 10))
         para.load_models = True
-        para.load_models_checkpoint = r"./working/DDPM/models/epoch_15_models.pth"
+        para.load_models_checkpoint = r"./working/DDPM/models/epoch_10_models.pth"
         run(para)
