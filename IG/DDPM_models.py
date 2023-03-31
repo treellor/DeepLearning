@@ -23,17 +23,7 @@ import torch.nn.functional as F
 from torch.nn.modules.normalization import GroupNorm
 import copy
 from functools import partial
-def get_norm(norm, num_channels, num_groups):
-    if norm == "in":
-        return nn.InstanceNorm2d(num_channels, affine=True)
-    elif norm == "bn":
-        return nn.BatchNorm2d(num_channels)
-    elif norm == "gn":
-        return nn.GroupNorm(num_groups, num_channels)
-    elif norm is None:
-        return nn.Identity()
-    else:
-        raise ValueError("unknown normalization type")
+from utils.common import EMA, generate_cosine_schedule, generate_linear_schedule
 
 
 class PositionalEmbedding(nn.Module):
@@ -129,7 +119,7 @@ class AttentionBlock(nn.Module):
         super().__init__()
 
         self.in_channels = in_channels
-        self.norm = get_norm(norm, in_channels, num_groups)
+        self.norm = nn.GroupNorm(num_groups, in_channels)
         self.to_qkv = nn.Conv2d(in_channels, in_channels * 3, 1)
         self.to_out = nn.Conv2d(in_channels, in_channels, 1)
 
@@ -187,10 +177,9 @@ class ResidualBlock(nn.Module):
 
         self.activation = activation
 
-        self.norm_1 = get_norm(norm, in_channels, num_groups)
+        self.norm_1 = nn.GroupNorm(num_groups, in_channels)
         self.conv_1 = nn.Conv2d(in_channels, out_channels, 3, padding=1)
-
-        self.norm_2 = get_norm(norm, out_channels, num_groups)
+        self.norm_2 = nn.GroupNorm(num_groups, out_channels)
         self.conv_2 = nn.Sequential(
             nn.Dropout(p=dropout),
             nn.Conv2d(out_channels, out_channels, 3, padding=1),
@@ -257,16 +246,15 @@ class UNet(nn.Module):
             time_emb_dim=None,
             time_emb_scale=1.0,
             num_classes=None,
-            activation=F.relu,
             dropout=0.1,
             attention_resolutions=(),
-            norm="gn",
+            #  norm="gn",
             num_groups=32,
             initial_pad=0,
     ):
         super().__init__()
 
-        self.activation = activation
+        self.activation = F.silu
         self.initial_pad = initial_pad
 
         self.num_classes = num_classes
@@ -295,8 +283,8 @@ class UNet(nn.Module):
                     dropout,
                     time_emb_dim=time_emb_dim,
                     num_classes=num_classes,
-                    activation=activation,
-                    norm=norm,
+                    activation=self.activation,
+                    #    norm=norm,
                     num_groups=num_groups,
                     use_attention=i in attention_resolutions,
                 ))
@@ -314,8 +302,8 @@ class UNet(nn.Module):
                 dropout,
                 time_emb_dim=time_emb_dim,
                 num_classes=num_classes,
-                activation=activation,
-                norm=norm,
+                activation=self.activation,
+                #     norm=norm,
                 num_groups=num_groups,
                 use_attention=True,
             ),
@@ -325,8 +313,8 @@ class UNet(nn.Module):
                 dropout,
                 time_emb_dim=time_emb_dim,
                 num_classes=num_classes,
-                activation=activation,
-                norm=norm,
+                activation=self.activation,
+                #     norm=norm,
                 num_groups=num_groups,
                 use_attention=False,
             ),
@@ -342,8 +330,8 @@ class UNet(nn.Module):
                     dropout,
                     time_emb_dim=time_emb_dim,
                     num_classes=num_classes,
-                    activation=activation,
-                    norm=norm,
+                    activation=self.activation,
+                    #    norm=norm,
                     num_groups=num_groups,
                     use_attention=i in attention_resolutions,
                 ))
@@ -354,7 +342,7 @@ class UNet(nn.Module):
 
         assert len(channels) == 0
 
-        self.out_norm = get_norm(norm, base_channels, num_groups)
+        self.out_norm = nn.GroupNorm(num_groups, base_channels)
         self.out_conv = nn.Conv2d(base_channels, img_channels, 3, padding=1)
 
     def forward(self, x, time=None, y=None):
@@ -398,19 +386,19 @@ class UNet(nn.Module):
             return x
 
 
-class EMA():
-    def __init__(self, decay):
-        self.decay = decay
-
-    def update_average(self, old, new):
-        if old is None:
-            return new
-        return old * self.decay + (1 - self.decay) * new
-
-    def update_model_average(self, ema_model, current_model):
-        for current_params, ema_params in zip(current_model.parameters(), ema_model.parameters()):
-            old, new = ema_params.data, current_params.data
-            ema_params.data = self.update_average(old, new)
+# class EMA():
+#     def __init__(self, decay):
+#         self.decay = decay
+#
+#     def update_average(self, old, new):
+#         if old is None:
+#             return new
+#         return old * self.decay + (1 - self.decay) * new
+#
+#     def update_model_average(self, ema_model, current_model):
+#         for current_params, ema_params in zip(current_model.parameters(), ema_model.parameters()):
+#             old, new = ema_params.data, current_params.data
+#             ema_params.data = self.update_average(old, new)
 
 
 class GaussianDiffusion(nn.Module):
@@ -431,44 +419,25 @@ class GaussianDiffusion(nn.Module):
         ema_update_rate (int): number of steps before each EMA update
     """
 
-    def __init__(
-            self,
-            model,
-            img_size,
-            img_channels,
-            num_classes,
-            betas,
-            loss_type="l2",
-            ema_decay=0.9999,
-            ema_start=5000,
-            ema_update_rate=1,
-    ):
+    def __init__(self, model, img_channels=3, img_size=(32, 24), num_timesteps=1000, loss_type="l2"):
         super().__init__()
 
         self.model = model
-        self.ema_model = copy.deepcopy(model)
-
-        self.ema = EMA(ema_decay)
-        self.ema_decay = ema_decay
-        self.ema_start = ema_start
-        self.ema_update_rate = ema_update_rate
-        self.step = 0
-
         self.img_size = img_size
         self.img_channels = img_channels
-        self.num_classes = num_classes
 
         if loss_type not in ["l1", "l2"]:
             raise ValueError("__init__() got unknown loss type")
 
         self.loss_type = loss_type
-        self.num_timesteps = len(betas)
+        self.num_timesteps = num_timesteps
+
+        betas = np.linspace(0.0001, 0.02, self.num_timesteps)
 
         alphas = 1.0 - betas
         alphas_cumprod = np.cumprod(alphas)
 
         to_torch = partial(torch.tensor, dtype=torch.float32)
-
 
         self.register_buffer("betas", to_torch(betas))
         self.register_buffer("alphas", to_torch(alphas))
@@ -481,29 +450,16 @@ class GaussianDiffusion(nn.Module):
         self.register_buffer("remove_noise_coeff", to_torch(betas / np.sqrt(1 - alphas_cumprod)))
         self.register_buffer("sigma", to_torch(np.sqrt(betas)))
 
-    def update_ema(self):
-        self.step += 1
-        if self.step % self.ema_update_rate == 0:
-            if self.step < self.ema_start:
-                self.ema_model.load_state_dict(self.model.state_dict())
-            else:
-                self.ema.update_model_average(self.ema_model, self.model)
+    @torch.no_grad()
+    def remove_noise(self, x, t, y):
+
+        return (
+                (x - extract(self.remove_noise_coeff, t, x.shape) * self.model(x, t, y)) *
+                extract(self.reciprocal_sqrt_alphas, t, x.shape)
+        )
 
     @torch.no_grad()
-    def remove_noise(self, x, t, y, use_ema=True):
-        if use_ema:
-            return (
-                    (x - extract(self.remove_noise_coeff, t, x.shape) * self.ema_model(x, t, y)) *
-                    extract(self.reciprocal_sqrt_alphas, t, x.shape)
-            )
-        else:
-            return (
-                    (x - extract(self.remove_noise_coeff, t, x.shape) * self.model(x, t, y)) *
-                    extract(self.reciprocal_sqrt_alphas, t, x.shape)
-            )
-
-    @torch.no_grad()
-    def sample(self, batch_size, device, y=None, use_ema=True):
+    def sample(self, batch_size, device, y=None):
         if y is not None and batch_size != len(y):
             raise ValueError("sample batch size different from length of given y")
 
@@ -511,7 +467,7 @@ class GaussianDiffusion(nn.Module):
 
         for t in range(self.num_timesteps - 1, -1, -1):
             t_batch = torch.tensor([t], device=device).repeat(batch_size)
-            x = self.remove_noise(x, t_batch, y, use_ema)
+            x = self.remove_noise(x, t_batch, y)
 
             if t > 0:
                 x += extract(self.sigma, t_batch, x.shape) * torch.randn_like(x)
@@ -519,7 +475,7 @@ class GaussianDiffusion(nn.Module):
         return x.cpu().detach()
 
     @torch.no_grad()
-    def sample_diffusion_sequence(self, batch_size, device, y=None, use_ema=True):
+    def sample_diffusion_sequence(self, batch_size, device, y=None):
         if y is not None and batch_size != len(y):
             raise ValueError("sample batch size different from length of given y")
 
@@ -528,7 +484,7 @@ class GaussianDiffusion(nn.Module):
 
         for t in range(self.num_timesteps - 1, -1, -1):
             t_batch = torch.tensor([t], device=device).repeat(batch_size)
-            x = self.remove_noise(x, t_batch, y, use_ema)
+            x = self.remove_noise(x, t_batch, y)
 
             if t > 0:
                 x += extract(self.sigma, t_batch, x.shape) * torch.randn_like(x)
@@ -569,75 +525,39 @@ class GaussianDiffusion(nn.Module):
         return self.get_losses(x, t, y)
 
 
-def generate_cosine_schedule(T, s=0.008):
-    def f(t, T):
-        return (np.cos((t / T + s) / (1 + s) * np.pi / 2)) ** 2
-
-    alphas = []
-    f0 = f(0, T)
-
-    for t in range(T + 1):
-        alphas.append(f(t, T) / f0)
-
-    betas = []
-
-    for t in range(1, T + 1):
-        betas.append(min(1 - alphas[t] / alphas[t - 1], 0.999))
-
-    return np.array(betas)
-
-
-def generate_linear_schedule(T, low, high):
-    return np.linspace(low, high, T)
-
-
 def extract(a, t, x_shape):
     b, *_ = t.shape
     out = a.gather(-1, t)
     return out.reshape(b, *((1,) * (len(x_shape) - 1)))
 
-
-
-
-
-def get_diffusion_from_args( config ):
-    activations = {
-        "relu": F.relu,
-        "mish": F.mish,
-        "silu": F.silu,
-    }
-
-    model = UNet(
-        img_channels=3,
-
-        base_channels=config.base_channels,
-        channel_mults=config.channel_mults,
-        time_emb_dim=config.time_emb_dim,
-        norm=config.norm,
-        dropout=config.dropout,
-        activation=activations[config.activation],
-        attention_resolutions=config.attention_resolutions,
-
-        num_classes=None, # if not args.use_labels else 10,
-        initial_pad=0,
-    )
-
-    if config.schedule == "cosine":
-        betas = generate_cosine_schedule(config.num_timesteps)
-    else:
-        betas = generate_linear_schedule(
-            config.num_timesteps,
-            config.schedule_low * 1000 / config.num_timesteps,
-            config.schedule_high * 1000 / config.num_timesteps,
-        )
-
-    diffusion = GaussianDiffusion(
-        model, (32, 24), 3, 10,
-        betas,
-        ema_decay=config.ema_decay,
-        ema_update_rate=config.ema_update_rate,
-        ema_start=2000,
-        loss_type=config.loss_type,
-    )
-
-    return diffusion
+# def get_diffusion_from_args(config):
+#     # activations = {
+#     #     "relu": F.relu,
+#     #     "mish": F.mish,
+#     #     "silu": F.silu,
+#     # }
+#
+#     model = UNet(
+#         img_channels=3,
+#
+#         base_channels=config.base_channels,
+#         channel_mults=config.channel_mults,
+#         time_emb_dim=config.time_emb_dim,
+#
+#         dropout=config.dropout,
+#         attention_resolutions=config.attention_resolutions,
+#
+#         num_classes=None,  # if not args.use_labels else 10,
+#         initial_pad=0,
+#     )
+#
+#     diffusion = GaussianDiffusion(
+#         model, (32, 24), 3, 10,
+#         #    ema_decay=config.ema_decay,
+#         #    ema_update_rate=config.ema_update_rate,
+#         num_timesteps=config.num_timesteps,
+#         ema_start=2000,
+#         loss_type=config.loss_type,
+#     )
+#
+#     return diffusion

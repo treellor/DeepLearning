@@ -23,7 +23,6 @@ import copy
 from functools import partial
 
 
-# 计算任意时刻的x采样值，基于x_0和重参数化
 import torch
 import torch.nn as nn
 
@@ -79,7 +78,7 @@ class MLPDiffusion(nn.Module):
         super(MLPDiffusion, self).__init__()
         # 扩散网络
         self.model = UNet(img_shape,n_steps, num_units)
-
+        # 生成次数
         self.n_steps = n_steps
         # 初始化相关参数,不参与梯度运算
         # 制定每一步的beta
