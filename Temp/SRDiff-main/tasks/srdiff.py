@@ -10,9 +10,11 @@ from utils.utils import load_ckpt
 
 class SRDiffTrainer(Trainer):
     def build_model(self):
+
         hidden_size = hparams['hidden_size']
         dim_mults = hparams['unet_dim_mults']
         dim_mults = [int(x) for x in dim_mults.split('|')]
+
         denoise_fn = Unet(
             hidden_size, out_dim=3, cond_dim=hparams['rrdb_num_feat'], dim_mults=dim_mults)
         if hparams['use_rrdb']:

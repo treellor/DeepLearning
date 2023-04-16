@@ -3,7 +3,7 @@
     Version		:  v1.0
     Date		:  2023.3.16
     Description	:
-        GAN最基本模型
+        DDPM 基本模块
     Reference	:
         Denoising Diffusion Probabilistic Models.    2020     Ian J. Goodfellow
     History		:
@@ -12,7 +12,6 @@
        Modification:
      2.…………
 """
-import torch.nn as nn
 import numpy as np
 
 import math
