@@ -18,10 +18,10 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from functools import partial
 
 from torch.nn.modules.normalization import GroupNorm
 import copy
-from functools import partial
 from utils.common import EMA, generate_cosine_schedule, generate_linear_schedule
 
 

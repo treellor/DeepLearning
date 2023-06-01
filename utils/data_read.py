@@ -97,7 +97,7 @@ class ImageDatasetResizeSingle(Dataset):
 
     def __getitem__(self, item):
         img = Image.open(self.filePaths[item])
-        if img.mode != 'RGB':
+        if img.mode not in  ['RGB','L']:
             raise ValueError("Image:{} isn't RGB mode.".format(self.filePaths[item]))
         # img, _cb, _cr = img.convert('YCbCr').split() 图像转换
         img = self.transforms(img)

@@ -23,13 +23,6 @@ from utils.data_read import ImageDatasetResizeSingle
 from utils.utils import load_model, save_model
 from utils.common import EMA
 from DDPM_models import UNet, GaussianDiffusion
-from DDPM_models_simple import MLPDiffusion
-
-import torchvision
-import numpy as np
-from torch.autograd import Variable
-import datetime
-from torchvision import datasets
 
 
 class DDPMConfig:
@@ -52,7 +45,7 @@ def train(opt):
     os.makedirs(save_folder_image, exist_ok=True)
     os.makedirs(save_folder_model, exist_ok=True)
 
-    dataset_train = ImageDatasetResizeSingle(opt.data_folder, img_H=opt.img_h, img_W=opt.img_w)
+    dataset_train = ImageDatasetResizeSingle(opt.data_folder, img_H=opt.img_h, img_W=opt.img_w, max_count=160)
     dataloader_train = DataLoader(dataset=dataset_train, num_workers=0, batch_size=opt.batch_size, shuffle=True)
 
     # img_shape = (opt.img_channels, opt.img_h, opt.img_w)
@@ -181,18 +174,20 @@ def parse_args():
 
 if __name__ == '__main__':
 
-    is_train = False
+    is_train = True
     if is_train:
         para = parse_args()
-        para.data_folder = '../data/face'
-        para.seq_length = 128
-        para.img_channels = 3
-        para.img_w = 24
-        para.img_h = 32
-        para.epochs = 10
-        para.batch_size = 32
+        #para.data_folder = '../data/face'
+        para.data_folder = r'D:\4-数据\archive\v_2\urban\s1'
+
+        para.seq_length = 256
+        para.img_channels = 1
+        para.img_w = 128
+        para.img_h = 128
+        para.epochs = 1
+        para.batch_size = 1
         # para.save_epoch = set(range(1, 10, 5))
-        para.save_img_rate = 30
+        para.save_img_rate = 1
         para.load_models = False
         para.load_models_checkpoint = r"./working/DDPM/models/epoch_15_models.pth"
         train(para)
