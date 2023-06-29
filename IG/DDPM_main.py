@@ -25,9 +25,8 @@ from utils.common import EMA
 from DDPM_models import GaussianDiffusion
 from backbone.unet import  UNet
 
-class DDPMConfig:
+class UNetConfig:
     def __init__(self):
-        self.num_timesteps = 1000
         # self.use_labels = False
         self.base_channels = 128
         self.channel_mults = (1, 2, 2, 2)
@@ -37,6 +36,7 @@ class DDPMConfig:
         self.time_emb_dim = 128 * 4
         self.num_classes = None if not False else 10
         self.initial_pad = 0
+
 
 
 def train(opt):
@@ -54,7 +54,7 @@ def train(opt):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     # Tensor = torch.cuda.FloatTensor if torch.cuda.is_available() else torch.Tensor
 
-    config = DDPMConfig()
+    config = UNetConfig()
 
     model = UNet(img_channels=opt.img_channels,
                  base_channels=config.base_channels,
@@ -67,7 +67,7 @@ def train(opt):
                  )
     ema = EMA(model, device)
 
-    diffusion = GaussianDiffusion(model, opt.img_channels, (opt.img_h, opt.img_w), num_timesteps=config.num_timesteps,
+    diffusion = GaussianDiffusion(model, opt.img_channels, (opt.img_h, opt.img_w), num_timesteps=opt.num_timesteps,
                                   loss_type="l2").to(device)
 
     optimizer = torch.optim.Adam(diffusion.parameters(), lr=opt.lr)
@@ -117,7 +117,7 @@ def run(opt):
     os.makedirs(save_folder_image, exist_ok=True)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    config = DDPMConfig()
+    config = UNetConfig()
     # 添加
     model = UNet(img_channels=opt.img_channels,
                  base_channels=config.base_channels,
@@ -129,7 +129,7 @@ def run(opt):
                  initial_pad=0,
                  )
 
-    diffusion = GaussianDiffusion(model, opt.img_channels, (opt.img_h, opt.img_w), num_timesteps=config.num_timesteps,
+    diffusion = GaussianDiffusion(model, opt.img_channels, (opt.img_h, opt.img_w), num_timesteps=opt.num_timesteps,
                                   loss_type="l2").to(device)
     load_model(opt.load_models_checkpoint, diffusion)
 
@@ -159,6 +159,8 @@ def parse_args():
     parser.add_argument("--b1", type=float, default=0.5, help="adam: decay of first order momentum of gradient")
     parser.add_argument("--b2", type=float, default=0.999, help="adam: decay of first order momentum of gradient")
 
+    parser.add_argument("--num_timesteps", type=int, default=1000, help="迭代次数")
+
     parser.add_argument('--epochs', type=int, default=5, help='total training epochs')
     parser.add_argument('--save_epoch', type=set, default=set(), help='number of saved epochs')
     parser.add_argument('--save_img_rate', type=int, default=5, help='')
@@ -179,7 +181,7 @@ if __name__ == '__main__':
         para = parse_args()
         para.data_folder = '../data/face'
         #para.data_folder = r'D:\4-数据\archive\v_2\urban\s1'
-
+        para.num_timesteps =1000
         para.seq_length = 256
         para.img_channels = 3
         para.img_w = 24
@@ -189,7 +191,7 @@ if __name__ == '__main__':
         # para.save_epoch = set(range(1, 10, 5))
         para.save_img_rate = 100
         para.load_models = True
-        para.load_models_checkpoint = r"./working/DDPM/models/epoch_200_models.pth"
+        para.load_models_checkpoint = r"./working/DDPM/models/epoch_300_models.pth"
         train(para)
     else:
         para = parse_args()
