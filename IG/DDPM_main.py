@@ -22,8 +22,8 @@ from torchvision.utils import save_image
 from utils.data_read import ImageDatasetResizeSingle
 from utils.utils import load_model, save_model
 from utils.common import EMA
-from DDPM_models import UNet, GaussianDiffusion
-
+from DDPM_models import GaussianDiffusion
+from backbone.unet import UNet
 
 class DDPMConfig:
     def __init__(self):
@@ -106,7 +106,7 @@ def train(opt):
             diffusion.eval()
             samples = diffusion.sample(batch_size=opt.batch_size, device=device)
             save_image(samples.data[:opt.batch_size],
-                       os.path.join(save_folder_image, f"epoch_{epoch + 1}_result.png"), nrow=8, normalize=False)
+                       os.path.join(save_folder_image, f"epoch_{epoch + 1}_result.png"), nrow=10, normalize=False)
         if epoch + 1 in save_epoch:
             save_model(os.path.join(save_folder_model, f"epoch_{epoch + 1}_models.pth"), diffusion, optimizer,
                        epoch + 1)
@@ -144,7 +144,7 @@ def run(opt):
     # else:
 
     samples = diffusion.sample(batch_size=opt.batch_size, device=device)
-    save_image(samples.data[:opt.batch_size], os.path.join(save_folder_image, f"result.png"), nrow=8, normalize=False)
+    save_image(samples.data[:opt.batch_size], os.path.join(save_folder_image, f"result.png"), nrow=10, normalize=False)
 
 
 def parse_args():
@@ -177,19 +177,19 @@ if __name__ == '__main__':
     is_train = True
     if is_train:
         para = parse_args()
-        #para.data_folder = '../data/face'
-        para.data_folder = r'D:\4-数据\archive\v_2\urban\s1'
+        para.data_folder = '../data/face'
+        #para.data_folder = r'D:\4-数据\archive\v_2\urban\s1'
 
         para.seq_length = 256
-        para.img_channels = 1
-        para.img_w = 128
-        para.img_h = 128
-        para.epochs = 1
-        para.batch_size = 1
+        para.img_channels = 3
+        para.img_w = 24
+        para.img_h = 32
+        para.epochs = 60
+        para.batch_size = 50
         # para.save_epoch = set(range(1, 10, 5))
-        para.save_img_rate = 1
-        para.load_models = False
-        para.load_models_checkpoint = r"./working/DDPM/models/epoch_15_models.pth"
+        para.save_img_rate = 60
+        para.load_models = True
+        para.load_models_checkpoint = r"./working/DDPM/models/epoch_60_models.pth"
         train(para)
     else:
         para = parse_args()
@@ -202,5 +202,5 @@ if __name__ == '__main__':
 
         # para.save_epoch = set(range(1, 100, 10))
         para.load_models = True
-        para.load_models_checkpoint = r"./working/DDPM/models/epoch_10_models.pth"
+        para.load_models_checkpoint = r"./working/DDPM/models/epoch_100_models.pth"
         run(para)
