@@ -21,7 +21,7 @@ from torchvision.utils import save_image, make_grid
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 
-from utils.data_read import ImageDatasetCrop,ImageDatasetHighLow
+from utils.data_read import ImageDatasetCrop
 from SRGAN_models import GeneratorResNet, DiscriminatorNet, TrainerSRGAN
 from utils.utils import save_model, load_model, calc_psnr, AverageMeter
 
@@ -33,9 +33,7 @@ def train(opt):
     os.makedirs(save_folder_model, exist_ok=True)
 
     # 读取数据
-    # dataset = ImageDatasetCrop(opt.data_folder, opt.hr_height, opt.hr_width, is_Normalize=True, scale_factor=4)
-    dataset = ImageDatasetHighLow(os.path.join(opt.data_folder, r"high"),os.path.join(opt.data_folder, r"low"),
-                                  is_Normalize=True)
+    dataset = ImageDatasetCrop(opt.data_folder, opt.hr_height, opt.hr_width, is_Normalize=True, scale_factor=4)
 
     img_shape = tuple(dataset[0]['hr'].shape)
 
@@ -211,9 +209,8 @@ def run(opt):
     save_folder_image = os.path.join(opt.save_folder, r"SRGAN/results")
     os.makedirs(save_folder_image, exist_ok=True)
 
-    #dataset = ImageDatasetCrop(opt.data_folder, opt.hr_height, opt.hr_width, scale_factor=4)
-    dataset = ImageDatasetHighLow(os.path.join(opt.data_folder, r"high"),os.path.join(opt.data_folder, r"low"),
-                                  is_Normalize=True)
+    dataset = ImageDatasetCrop(opt.data_folder, opt.hr_height, opt.hr_width, scale_factor=4)
+
     result_dataloader = DataLoader(dataset=dataset, num_workers=0, batch_size=opt.batch_size, shuffle=True)
 
     # Initialize generator and discriminator
@@ -268,32 +265,31 @@ if __name__ == '__main__':
     if is_train:
         para = parse_args()
         # para.data_folder = '../data/T91'
-        # para.data_folder = '../data/DIV2K_train_LR_x8'
-        para.data_folder = '../data/SAR'
+        para.data_folder = '../data/DIV2K_train_LR_x8'
+
         para.save_folder = r"./working/"
-        para.hr_height = 256
-        para.hr_width = 256
-        para.scale_factor = 2
-       # para.pre_train_epochs = 20
-        para.epochs = 300
+        para.hr_height = 160
+        para.hr_width = 160
+        para.scale_factor = 4
+        para.pre_train_epochs = 20
+        para.epochs = 80
         para.batch_size = 8
-        para.save_epoch = set(range(1, 300, 1))
+        # para.save_epoch = set(range(1, 100, 20))
         para.load_models = True
-        para.load_models_path_gen = r"./working/SRGAN/models/epoch_500_generator.pth"
-        para.load_models_path_dis = r"./working/SRGAN/models/epoch_500_discriminator.pth"
+        para.load_models_path_gen = r"./working/SRGAN/models/epoch_1200_generator.pth"
+        para.load_models_path_dis = r"./working/SRGAN/models/epoch_1200_discriminator.pth"
 
         train(para)
 
     else:
         para = parse_args()
-        #para.data_folder = '../data/T91'
-        para.data_folder = '../data/SAR'
+        para.data_folder = '../data/T91'
         para.save_folder = r"./working/"
-        #para.img_w = 128
-        #para.img_h = 160
-        para.scale_factor = 2
+        para.img_w = 160
+        para.img_h = 160
+        para.scale_factor = 4
         para.batch_size = 8
-        para.load_models_path_gen = r"./working/SRGAN/models/epoch_3500_generator.pth"
-        para.load_models_path_dis = r"./working/SRGAN/models/epoch_3500_discriminator.pth"
+        para.load_models_path_gen = r"./working/SRGAN/models/epoch_1200_generator.pth"
+        para.load_models_path_dis = r"./working/SRGAN/models/epoch_1200_discriminator.pth"
 
         run(para)
