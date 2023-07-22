@@ -219,10 +219,14 @@ class ImageDatasetCrop(Dataset):
         return {"lr": img_lr, "hr": img_hr}
 
 
-class ImageDatasetHighLow(Dataset):
-    def __init__(self, path_folder_high, path_folder_low,
+class ImageDatasetPair(Dataset):
+    '''
+    # 读取成对图片, 参考图像和待处理图像
+    # 直接读取，不对图像进行裁剪，缩放
+    '''
+    def __init__(self, path_folder_def, path_folder_test,
                  is_Normalize=False, mean=None, std=None, max_count=None):
-        super(ImageDatasetHighLow, self).__init__()
+        super(ImageDatasetPair, self).__init__()
 
         if std is None:
             std = [0.229, 0.224, 0.225]
@@ -232,36 +236,37 @@ class ImageDatasetHighLow(Dataset):
         self.is_Normalize = is_Normalize
         if self.is_Normalize:
             self.transforms_Normalize = tfs.Compose([tfs.Normalize(mean, std)])
-        self.filePathsHigh = []
-        self.filePathsLow = []
-        images_high = os.listdir(path_folder_high)
-        images_low = os.listdir(path_folder_low)
+
+        self.filePathsDef = []
+        self.filePathsTest = []
+        images_Def = os.listdir(path_folder_def)
+        images_Test = os.listdir(path_folder_test)
         count = 0
-        for f in images_high:
-            if f in images_low:
-                if is_image_file(path_folder_high + f):
+        for f in images_Def:
+            if f in images_Test:
+                if is_image_file(path_folder_def + f):
                     if max_count is not None:
                         if count >= max_count:
                             break
                     else:
                         count = count + 1
-                        self.filePathsHigh.append(os.path.join(path_folder_high, f))
-                        self.filePathsLow.append(os.path.join(path_folder_low, f))
+                        self.filePathsDef.append(os.path.join(path_folder_def, f))
+                        self.filePathsTest.append(os.path.join(path_folder_test, f))
 
     def __len__(self):
-        return len(self.filePathsHigh)
+        return len(self.filePathsDef)
 
     def __getitem__(self, item):
-        img1 = Image.open(self.filePathsHigh[item])
-        img2 = Image.open(self.filePathsLow[item])
-        image_high = self.transforms_Tensor(img1)
-        image_low = self.transforms_Tensor(img2)
+        img1 = Image.open(self.filePathsDef[item])
+        img2 = Image.open(self.filePathsTest[item])
+        image_def = self.transforms_Tensor(img1)
+        image_test = self.transforms_Tensor(img2)
         if self.is_Normalize:
-            image_high = self.transforms_Normalize(image_high)
-            image_low = self.transforms_Normalize(image_low)
-        return {"lr": image_low, "hr": image_high}
+            image_def = self.transforms_Normalize(image_def)
+            image_test = self.transforms_Normalize(image_test)
+        return {"def": image_def, "test": image_test}
 
 
 if __name__ == '__main__':
-    dataset = ImageDatasetHighLow(r"D:\project\Pycharm\DeepLearning\data\coco125\high",
+    dataset = ImageDatasetPair(r"D:\project\Pycharm\DeepLearning\data\coco125\high",
                                   r"D:\project\Pycharm\DeepLearning\data\coco125\low", is_Normalize=True)

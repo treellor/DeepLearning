@@ -1,7 +1,7 @@
 """
     Author		:  Treellor
     Version		:  v1.0
-    Date		:  2023.03.19
+    Date		:  2023.07.21
     Description	:
             SRDiff  模型训练
     Others		:  //其他内容说明
@@ -11,6 +11,7 @@
        Modification:
      2.…………
 """
+
 import os
 import argparse
 from tqdm import tqdm
@@ -19,20 +20,16 @@ import torch
 from torch.utils.data import DataLoader
 from torchvision.utils import save_image
 
-from utils.data_read import ImageDatasetResizeSingle
+from utils.data_read import ImageDatasetPair
+
 from utils.utils import load_model, save_model
 from utils.common import EMA
-
-import torchvision
-import numpy as np
-from torch.autograd import Variable
-import datetime
-from torchvision import datasets
+from models.DDPM_models import GaussianDiffusion
+from backbone.unet import UNet
 
 
-class DDPMConfig:
+class UNetConfig:
     def __init__(self):
-        self.num_timesteps = 1000
         # self.use_labels = False
         self.base_channels = 128
         self.channel_mults = (1, 2, 2, 2)
@@ -45,21 +42,30 @@ class DDPMConfig:
 
 
 def train(opt):
-    save_folder_image = os.path.join(opt.save_folder, r"DDPM/images")
-    save_folder_model = os.path.join(opt.save_folder, r"DDPM/models")
+    save_folder_image = os.path.join(opt.save_folder, r"ColorSARDiff/images")
+    save_folder_model = os.path.join(opt.save_folder, r"ColorSARDiff/models")
     os.makedirs(save_folder_image, exist_ok=True)
     os.makedirs(save_folder_model, exist_ok=True)
 
-    dataset_train = ImageDatasetResizeSingle(opt.data_folder, img_H=opt.img_h, img_W=opt.img_w)
-    dataloader_train = DataLoader(dataset=dataset_train, num_workers=0, batch_size=opt.batch_size, shuffle=True)
+    dataset_sar = os.path.join(opt.data_folder, r"sar")
+    dataset_optical = os.path.join(opt.data_folder, r"optical")
 
-    # img_shape = (opt.img_channels, opt.img_h, opt.img_w)
+    dataset = ImageDatasetPair(dataset_optical, dataset_sar, is_Normalize=True)
+
+    img_shape = tuple(dataset[0]['def'].shape)
+
+    data_len = dataset.__len__()
+    val_data_len = opt.batch_size * 3
+    train_set, val_set = torch.utils.data.random_split(dataset, [data_len - val_data_len, val_data_len])
+
+    test_dataloader = DataLoader(dataset=val_set, num_workers=0, batch_size=opt.batch_size, shuffle=True)
+    train_dataloader = DataLoader(dataset=train_set, num_workers=0, batch_size=opt.batch_size, shuffle=True)
 
     # Initialize generator and discriminator
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     # Tensor = torch.cuda.FloatTensor if torch.cuda.is_available() else torch.Tensor
 
-    config = DDPMConfig()
+    config = UNetConfig()
 
     model = UNet(img_channels=opt.img_channels,
                  base_channels=config.base_channels,
@@ -72,7 +78,7 @@ def train(opt):
                  )
     ema = EMA(model, device)
 
-    diffusion = GaussianDiffusion(model, opt.img_channels, (opt.img_h, opt.img_w), num_timesteps=config.num_timesteps,
+    diffusion = GaussianDiffusion(model, opt.img_channels, (opt.img_h, opt.img_w), num_timesteps=opt.num_timesteps,
                                   loss_type="l2").to(device)
 
     optimizer = torch.optim.Adam(diffusion.parameters(), lr=opt.lr)
@@ -93,12 +99,13 @@ def train(opt):
     for epoch in range(trained_epoch, trained_epoch + n_epochs):
         # Training
         diffusion.train()
-        for batch_idx, imgs in tqdm(enumerate(dataloader_train), desc=f'Training Epoch {epoch}',
-                                    total=int(len(dataloader_train))):
-            x = imgs.to(device)
+        for batch_idx, imgs in tqdm(enumerate(train_dataloader), desc=f'Training Epoch {epoch}',
+                                    total=int(len(train_dataloader))):
+            images_optical = imgs["def"].to(device)
+            images_sar = imgs["test"].to(device)
 
             optimizer.zero_grad()
-            loss = diffusion(x)
+            loss = diffusion(images_sar, images_optical)
             loss.backward()
             optimizer.step()
 
@@ -111,18 +118,23 @@ def train(opt):
             diffusion.eval()
             samples = diffusion.sample(batch_size=opt.batch_size, device=device)
             save_image(samples.data[:opt.batch_size],
-                       os.path.join(save_folder_image, f"epoch_{epoch + 1}_result.png"), nrow=8, normalize=False)
+                       os.path.join(save_folder_image, f"epoch_{epoch + 1}_result.png"), nrow=10, normalize=False)
         if epoch + 1 in save_epoch:
             save_model(os.path.join(save_folder_model, f"epoch_{epoch + 1}_models.pth"), diffusion, optimizer,
                        epoch + 1)
 
 
 def run(opt):
-    save_folder_image = os.path.join(opt.save_folder, r"DDPM/results")
+    save_folder_image = os.path.join(opt.save_folder, r"ColorSARDiff/results")
     os.makedirs(save_folder_image, exist_ok=True)
 
+    dataset_sar = os.path.join(opt.data_folder, r"sar")
+    dataset_optical = os.path.join(opt.data_folder, r"optical")
+    dataset = ImageDatasetPair(dataset_optical, dataset_sar, is_Normalize=True)
+    result_dataloader = DataLoader(dataset=dataset, num_workers=0, batch_size=opt.batch_size, shuffle=True)
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    config = DDPMConfig()
+    config = UNetConfig()
     # 添加
     model = UNet(img_channels=opt.img_channels,
                  base_channels=config.base_channels,
@@ -134,9 +146,22 @@ def run(opt):
                  initial_pad=0,
                  )
 
-    diffusion = GaussianDiffusion(model, opt.img_channels, (opt.img_h, opt.img_w), num_timesteps=config.num_timesteps,
+    diffusion = GaussianDiffusion(model, opt.img_channels, (opt.img_h, opt.img_w), num_timesteps=opt.num_timesteps,
                                   loss_type="l2").to(device)
     load_model(opt.load_models_checkpoint, diffusion)
+
+    # Initialize generator and discriminator
+
+    for batch_idx, images_hl in tqdm(enumerate(result_dataloader), total=int(len(result_dataloader))):
+        # Configure model input
+        img_lr = images_hl["test"].to(device)
+        img_hr = images_hl["def"].to(device)
+
+        samples = diffusion.sample(batch_size=opt.batch_size, device=device, y=img_lr)
+        save_image(samples.data[:opt.batch_size], os.path.join(save_folder_image, f"picture_{batch_idx}.png"), nrow=10,
+                   normalize=False)
+
+
 
     # if args.use_labels:
     #     for label in range(10):
@@ -147,9 +172,6 @@ def run(opt):
     #             image = ((samples[image_id] + 1) / 2).clip(0, 1)
     #             torchvision.utils.save_image(image, f"{args.save_dir}/{label}-{image_id}.png")
     # else:
-
-    samples = diffusion.sample(batch_size=opt.batch_size, device=device)
-    save_image(samples.data[:opt.batch_size], os.path.join(save_folder_image, f"result.png"), nrow=8, normalize=False)
 
 
 def parse_args():
@@ -164,13 +186,15 @@ def parse_args():
     parser.add_argument("--b1", type=float, default=0.5, help="adam: decay of first order momentum of gradient")
     parser.add_argument("--b2", type=float, default=0.999, help="adam: decay of first order momentum of gradient")
 
+    parser.add_argument("--num_timesteps", type=int, default=1000, help="迭代次数")
+
     parser.add_argument('--epochs', type=int, default=5, help='total training epochs')
     parser.add_argument('--save_epoch', type=set, default=set(), help='number of saved epochs')
     parser.add_argument('--save_img_rate', type=int, default=5, help='')
 
     parser.add_argument('--save_folder', type=str, default=r"./working/", help='image save path')
     parser.add_argument('--load_models', type=bool, default=False, help='load pretrained model weight')
-    parser.add_argument('--load_models_checkpoint', type=str, default=r"./working/SRGAN/models/discriminator.pth",
+    parser.add_argument('--load_models_checkpoint', type=str, default=r"./working/SRDiff/models/checkpoint.pth",
                         help='load model path')
 
     args = parser.parse_args(args=[])  # 不添加args=[] kaggle会报错
@@ -179,20 +203,25 @@ def parse_args():
 
 if __name__ == '__main__':
 
-    is_train = False
+    is_train = True
     if is_train:
         para = parse_args()
-        para.data_folder = '../data/face'
-        para.seq_length = 128
+
+        para.data_folder = '../data/SAR128'
+        para.save_folder = r"./working/"
+
+        para.num_timesteps = 1000
+        para.seq_length = 256
         para.img_channels = 3
-        para.img_w = 24
-        para.img_h = 32
-        para.epochs = 10
-        para.batch_size = 32
+        para.img_w = 128
+        para.img_h = 128
+        para.epochs = 100
+        para.batch_size = 4
         # para.save_epoch = set(range(1, 10, 5))
-        para.save_img_rate = 30
+        para.save_img_rate = 100
         para.load_models = False
-        para.load_models_checkpoint = r"./working/DDPM/models/epoch_15_models.pth"
+        para.load_models_checkpoint = r"./working/DDPM/models/epoch_400_models.pth"
+
         train(para)
     else:
         para = parse_args()

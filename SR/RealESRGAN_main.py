@@ -34,6 +34,8 @@ def train(opt):
     os.makedirs(save_folder_model, exist_ok=True)
 
     # 读取数据
+
+
     dataset = ImageDatasetResize(opt.data_folder, img_H=opt.hr_height, img_W=opt.hr_width, scale_factor=4)
     img_shape = tuple(dataset[0]['hr'].shape)
 

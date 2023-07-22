@@ -22,7 +22,7 @@ from torchvision.utils import save_image
 from utils.data_read import ImageDatasetResizeSingle
 from utils.utils import load_model, save_model
 from utils.common import EMA
-from DDPM_models import GaussianDiffusion
+from models.DDPM_models import GaussianDiffusion
 from backbone.unet import  UNet
 
 class UNetConfig:
@@ -36,7 +36,6 @@ class UNetConfig:
         self.time_emb_dim = 128 * 4
         self.num_classes = None if not False else 10
         self.initial_pad = 0
-
 
 
 def train(opt):
@@ -180,7 +179,7 @@ if __name__ == '__main__':
     if is_train:
         para = parse_args()
         para.data_folder = '../data/face'
-        #para.data_folder = r'D:\4-数据\archive\v_2\urban\s1'
+        # para.data_folder = r'D:\4-数据\archive\v_2\urban\s1'
         para.num_timesteps =1000
         para.seq_length = 256
         para.img_channels = 3
@@ -191,7 +190,7 @@ if __name__ == '__main__':
         # para.save_epoch = set(range(1, 10, 5))
         para.save_img_rate = 100
         para.load_models = True
-        para.load_models_checkpoint = r"./working/DDPM/models/epoch_300_models.pth"
+        para.load_models_checkpoint = r"./working/DDPM/models/epoch_500_models.pth"
         train(para)
     else:
         para = parse_args()
