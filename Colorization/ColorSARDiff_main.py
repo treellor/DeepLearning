@@ -3,7 +3,7 @@
     Version		:  v1.0
     Date		:  2023.07.21
     Description	:
-            SRDiff  模型训练
+            基于扩散模型的SAR图像上色算法
     Others		:  //其他内容说明
     History		:
      1.Date:
@@ -26,7 +26,6 @@ from utils.utils import load_model, save_model
 from utils.common import EMA
 from models.DDPM_models import GaussianDiffusion
 from backbone.unet import UNet
-
 
 class UNetConfig:
     def __init__(self):
@@ -173,7 +172,6 @@ def run(opt):
     #             torchvision.utils.save_image(image, f"{args.save_dir}/{label}-{image_id}.png")
     # else:
 
-
 def parse_args():
     parser = argparse.ArgumentParser(description="You should add those parameter!")
     parser.add_argument('--data_folder', type=str, default='data/coco_sub', help='dataset path')
@@ -215,10 +213,10 @@ if __name__ == '__main__':
         para.img_channels = 3
         para.img_w = 128
         para.img_h = 128
-        para.epochs = 100
+        para.epochs = 5
         para.batch_size = 4
         # para.save_epoch = set(range(1, 10, 5))
-        para.save_img_rate = 100
+        para.save_img_rate = 5
         para.load_models = False
         para.load_models_checkpoint = r"./working/DDPM/models/epoch_400_models.pth"
 
