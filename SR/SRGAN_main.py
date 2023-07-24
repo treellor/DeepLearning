@@ -203,7 +203,7 @@ def train(opt):
     plt.plot(train_psnr_all, color='blue', label='train psnr')
     plt.plot(val_psnr_all, color='red', label='Validate psnr')
     plt.xlabel('Epochs')
-    plt.ylabel('DB ')
+    plt.ylabel('dB ')
     plt.legend()
     plt.savefig(os.path.join(save_folder_image, 'psnr.png'))
     plt.show()

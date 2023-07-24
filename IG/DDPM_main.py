@@ -23,7 +23,7 @@ from utils.data_read import ImageDatasetResizeSingle
 from utils.utils import load_model, save_model
 from utils.common import EMA
 from models.DDPM_models import GaussianDiffusion
-from backbone.unet import  UNet
+from backbone.unet import UNet
 
 class UNetConfig:
     def __init__(self):
@@ -66,7 +66,7 @@ def train(opt):
                  )
     ema = EMA(model, device)
 
-    diffusion = GaussianDiffusion(model, opt.img_channels, (opt.img_h, opt.img_w), num_timesteps=opt.num_timesteps,
+    diffusion = GaussianDiffusion(model, opt.img_channels, (opt.img_h, opt.img_w), timesteps=opt.timesteps,
                                   loss_type="l2").to(device)
 
     optimizer = torch.optim.Adam(diffusion.parameters(), lr=opt.lr)
@@ -80,11 +80,8 @@ def train(opt):
     # adversarial_loss = torch.nn.BCELoss().to(device)
 
     n_epochs = opt.epochs
-    save_epoch = opt.save_epoch.union({n_epochs + trained_epoch})
 
-    # acc_train_loss = 0
-
-    for epoch in range(trained_epoch, trained_epoch + n_epochs):
+    for epoch in range(trained_epoch + 1, trained_epoch + n_epochs + 1):
         # Training
         diffusion.train()
         for batch_idx, imgs in tqdm(enumerate(dataloader_train), desc=f'Training Epoch {epoch}',
@@ -95,20 +92,17 @@ def train(opt):
             loss = diffusion(x)
             loss.backward()
             optimizer.step()
-
             # acc_train_loss += loss.item()
             # diffusion.update_ema()
             ema.update_ema(diffusion.model)
 
         # Save models and images
-        if (epoch + 1) % opt.save_img_rate == 0:
+        if (epoch % opt.save_epoch_rate) == 0 or (epoch == (trained_epoch + n_epochs)):
             diffusion.eval()
             samples = diffusion.sample(batch_size=opt.batch_size, device=device)
             save_image(samples.data[:opt.batch_size],
-                       os.path.join(save_folder_image, f"epoch_{epoch + 1}_result.png"), nrow=10, normalize=False)
-        if epoch + 1 in save_epoch:
-            save_model(os.path.join(save_folder_model, f"epoch_{epoch + 1}_models.pth"), diffusion, optimizer,
-                       epoch + 1)
+                       os.path.join(save_folder_image, f"epoch_{epoch}_result.png"), nrow=10, normalize=False)
+            save_model(os.path.join(save_folder_model, f"epoch_{epoch}_models.pth"), diffusion, optimizer, epoch)
 
 
 def run(opt):
@@ -128,19 +122,9 @@ def run(opt):
                  initial_pad=0,
                  )
 
-    diffusion = GaussianDiffusion(model, opt.img_channels, (opt.img_h, opt.img_w), num_timesteps=opt.num_timesteps,
+    diffusion = GaussianDiffusion(model, opt.img_channels, (opt.img_h, opt.img_w), timesteps=opt.timesteps,
                                   loss_type="l2").to(device)
     load_model(opt.load_models_checkpoint, diffusion)
-
-    # if args.use_labels:
-    #     for label in range(10):
-    #         y = torch.ones(args.num_images // 10, dtype=torch.long, device=device) * label
-    #         samples = diffusion.sample(args.num_images // 10, device, y=y)
-    #
-    #         for image_id in range(len(samples)):
-    #             image = ((samples[image_id] + 1) / 2).clip(0, 1)
-    #             torchvision.utils.save_image(image, f"{args.save_dir}/{label}-{image_id}.png")
-    # else:
 
     samples = diffusion.sample(batch_size=opt.batch_size, device=device)
     save_image(samples.data[:opt.batch_size], os.path.join(save_folder_image, f"result.png"), nrow=10, normalize=False)
@@ -149,22 +133,17 @@ def run(opt):
 def parse_args():
     parser = argparse.ArgumentParser(description="You should add those parameter!")
     parser.add_argument('--data_folder', type=str, default='data/coco_sub', help='dataset path')
+    parser.add_argument('--save_folder', type=str, default=r"./working/", help='image save path')
     parser.add_argument('--img_channels', type=int, default=3, help='the channel of the image')
     parser.add_argument('--img_w', type=int, default=64, help='image width')
     parser.add_argument('--img_h', type=int, default=64, help='image height')
-
     parser.add_argument('--batch_size', type=int, default=8, help='total batch size for all GPUs')
     parser.add_argument("--lr", type=float, default=0.0002, help="adam: learning rate")
     parser.add_argument("--b1", type=float, default=0.5, help="adam: decay of first order momentum of gradient")
     parser.add_argument("--b2", type=float, default=0.999, help="adam: decay of first order momentum of gradient")
-
-    parser.add_argument("--num_timesteps", type=int, default=1000, help="迭代次数")
-
+    parser.add_argument("--timesteps", type=int, default=1000, help="迭代次数")
     parser.add_argument('--epochs', type=int, default=5, help='total training epochs')
-    parser.add_argument('--save_epoch', type=set, default=set(), help='number of saved epochs')
-    parser.add_argument('--save_img_rate', type=int, default=5, help='')
-
-    parser.add_argument('--save_folder', type=str, default=r"./working/", help='image save path')
+    parser.add_argument('--save_epoch_rate', type=int, default=100, help='How many epochs save once')
     parser.add_argument('--load_models', type=bool, default=False, help='load pretrained model weight')
     parser.add_argument('--load_models_checkpoint', type=str, default=r"./working/SRGAN/models/discriminator.pth",
                         help='load model path')
@@ -175,33 +154,27 @@ def parse_args():
 
 if __name__ == '__main__':
 
+    para = parse_args()
+    para.save_folder = r"./working/"
+    para.data_folder = '../data/face'
+    # para.data_folder = r'D:\4-数据\archive\v_2\urban\s1'
+    para.timesteps = 100
+    para.seq_length = 256
+    para.img_channels = 3
+    para.img_w = 24
+    para.img_h = 32
+    para.batch_size = 100
+
     is_train = True
+
     if is_train:
-        para = parse_args()
-        para.data_folder = '../data/face'
-        # para.data_folder = r'D:\4-数据\archive\v_2\urban\s1'
-        para.num_timesteps =1000
-        para.seq_length = 256
-        para.img_channels = 3
-        para.img_w = 24
-        para.img_h = 32
-        para.epochs = 100
-        para.batch_size = 100
-        # para.save_epoch = set(range(1, 10, 5))
+        para.epochs = 50
         para.save_img_rate = 100
-        para.load_models = True
-        para.load_models_checkpoint = r"./working/DDPM/models/epoch_500_models.pth"
+        para.load_models = False
+        para.load_models_checkpoint = r"./working/DDPM/models/epoch_300_models.pth"
         train(para)
     else:
-        para = parse_args()
-        para.data_folder = '../data/face'
-        para.seq_length = 128
-        para.img_channels = 3
-        para.img_w = 24
-        para.img_h = 32
-        para.batch_size = 24
-
         # para.save_epoch = set(range(1, 100, 10))
         para.load_models = True
-        para.load_models_checkpoint = r"./working/DDPM/models/epoch_10_models.pth"
+        para.load_models_checkpoint = r"./working/DDPM/models/epoch_600_models.pth"
         run(para)
