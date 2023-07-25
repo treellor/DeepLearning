@@ -106,9 +106,10 @@ def train(opt):
             images_optical = imgs["def"].to(device)
             images_sar = imgs["test"].to(device)
 
+
             optimizer.zero_grad()
 
-            loss = diffusion(x=images_optical, noise=images_sar)
+            loss = diffusion(x=images_optical, y=images_sar)
             loss.backward()
             optimizer.step()
 
@@ -119,7 +120,7 @@ def train(opt):
         # Save models and images
         if epoch % opt.save_epoch_rate == 0 or (epoch == (trained_epoch + n_epochs)):
             diffusion.eval()
-            samples = diffusion.sample(batch_size=opt.batch_size, device=device, noise=show_image_sar)
+            samples = diffusion.sample(batch_size=opt.batch_size, device=device, y=show_image_sar).to(device)
 
             img_sar = make_grid(show_image_sar, nrow=1, normalize=True).to(device)
             img_optical = make_grid(show_image_optical, nrow=1, normalize=True).to(device)
@@ -163,11 +164,12 @@ def run(opt):
         img_sar = images_hl["test"].to(device)
         img_optical = images_hl["def"].to(device)
 
-        samples = diffusion.sample(batch_size=opt.batch_size, device=device, noise=img_sar)
+        samples = diffusion.sample(batch_size=opt.batch_size, device=device, y=img_sar)
 
+        images_gen = samples + img_sar
         img_sar = make_grid(img_sar, nrow=1, normalize=True).to(device)
         img_optical = make_grid(img_optical, nrow=1, normalize=True).to(device)
-        gen_color = make_grid(samples, nrow=1, normalize=True).to(device)
+        gen_color = make_grid(images_gen, nrow=1, normalize=True).to(device)
 
         img_grid = torch.cat((img_sar, img_optical, gen_color), -1)
         save_image(img_grid, os.path.join(save_folder_image, f"picture_{batch_idx}.png"), normalize=False)
@@ -209,7 +211,7 @@ if __name__ == '__main__':
 
     is_train = True
     if is_train:
-        para.epochs = 10
+        para.epochs = 4
         para.save_epoch_rate = 2
         para.load_models = False
         para.load_models_checkpoint = r"./working/ColorSARDiff/models/epoch_1_models.pth"

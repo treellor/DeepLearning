@@ -193,10 +193,10 @@ class ImageDatasetPair(Dataset):
                     if max_count is not None:
                         if count >= max_count:
                             break
-                    else:
-                        count = count + 1
-                        self.filePathsDef.append(os.path.join(path_folder_def, f))
-                        self.filePathsTest.append(os.path.join(path_folder_test, f))
+
+                    count = count + 1
+                    self.filePathsDef.append(os.path.join(path_folder_def, f))
+                    self.filePathsTest.append(os.path.join(path_folder_test, f))
 
     def __len__(self):
         return len(self.filePathsDef)

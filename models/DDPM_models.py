@@ -20,6 +20,7 @@ from functools import partial
 from tqdm import tqdm
 import numpy as np
 
+
 class GaussianDiffusion(nn.Module):
     __doc__ = r"""Gaussian Diffusion model. Forwarding through the module returns diffusion reversal scalar loss tensor.
     Input:
@@ -77,14 +78,11 @@ class GaussianDiffusion(nn.Module):
                 )
 
     @torch.no_grad()
-    def sample(self, batch_size, device, noise=None, y=None):
+    def sample(self, batch_size, device, y=None):
         if y is not None and batch_size != len(y):
             raise ValueError("sample batch size different from length of given y")
 
-        if noise is None:
-            x = torch.randn(batch_size, self.img_channels, *self.img_size, device=device)
-        else:
-            x = noise
+        x = torch.randn(batch_size, self.img_channels, *self.img_size, device=device)
 
         for t in tqdm(range(self.timesteps - 1, -1, -1), desc=f'sample times', total=self.timesteps):
             t_batch = torch.tensor([t], device=device).repeat(batch_size)
@@ -120,10 +118,9 @@ class GaussianDiffusion(nn.Module):
                 extract(self.sqrt_one_minus_alphas_cumprod, t, x.shape) * noise
         )
 
-    def get_losses(self, x, t, noise=None, y=None):
+    def get_losses(self, x, t, y):
 
-        if noise is None:
-            noise = torch.randn_like(x)
+        noise = torch.randn_like(x)
 
         perturbed_x = self.perturb_x(x, t, noise)
         estimated_noise = self.model(perturbed_x, t, y)
@@ -135,7 +132,7 @@ class GaussianDiffusion(nn.Module):
 
         return loss
 
-    def forward(self, x, noise=None, y=None):
+    def forward(self, x, y=None):
         b, c, h, w = x.shape
         device = x.device
 
@@ -145,7 +142,7 @@ class GaussianDiffusion(nn.Module):
             raise ValueError("image width does not match diffusion parameters")
 
         t = torch.randint(0, self.timesteps, (b,), device=device)
-        return self.get_losses(x, t, noise, y)
+        return self.get_losses(x, t, y)
 
 
 def extract(a, t, x_shape):

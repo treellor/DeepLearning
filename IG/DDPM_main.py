@@ -156,25 +156,25 @@ if __name__ == '__main__':
 
     para = parse_args()
     para.save_folder = r"./working/"
-    para.data_folder = '../data/face'
-    # para.data_folder = r'D:\4-数据\archive\v_2\urban\s1'
+    #para.data_folder = '../data/face'
+    para.data_folder = '../data/SAR128/optical'
     para.timesteps = 100
     para.seq_length = 256
     para.img_channels = 3
-    para.img_w = 24
-    para.img_h = 32
-    para.batch_size = 100
+    para.img_w = 128
+    para.img_h = 128
+    para.batch_size = 4
 
     is_train = True
 
     if is_train:
-        para.epochs = 50
-        para.save_epoch_rate = 100
+        para.epochs = 10
+        para.save_epoch_rate = 2
         para.load_models = False
         para.load_models_checkpoint = r"./working/DDPM/models/epoch_300_models.pth"
         train(para)
     else:
         # para.save_epoch = set(range(1, 100, 10))
         para.load_models = True
-        para.load_models_checkpoint = r"./working/DDPM/models/epoch_600_models.pth"
+        para.load_models_checkpoint = r"./working/DDPM/models/epoch_50_models.pth"
         run(para)
