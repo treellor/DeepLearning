@@ -19,7 +19,7 @@ import torch
 from torch.utils.data import DataLoader
 from torchvision.utils import save_image
 
-from utils.data_read import ImageDatasetResizeSingle
+from utils.data_read import ImageDatasetSingle
 from utils.utils import load_model, save_model
 from utils.common import EMA
 from models.DDPM_models import GaussianDiffusion
@@ -44,7 +44,7 @@ def train(opt):
     os.makedirs(save_folder_image, exist_ok=True)
     os.makedirs(save_folder_model, exist_ok=True)
 
-    dataset_train = ImageDatasetResizeSingle(opt.data_folder, img_H=opt.img_h, img_W=opt.img_w, max_count=160)
+    dataset_train = ImageDatasetSingle(opt.data_folder, img_H=opt.img_h, img_W=opt.img_w, max_count=160)
     dataloader_train = DataLoader(dataset=dataset_train, num_workers=0, batch_size=opt.batch_size, shuffle=True)
 
     # img_shape = (opt.img_channels, opt.img_h, opt.img_w)
@@ -169,7 +169,7 @@ if __name__ == '__main__':
 
     if is_train:
         para.epochs = 50
-        para.save_img_rate = 100
+        para.save_epoch_rate = 100
         para.load_models = False
         para.load_models_checkpoint = r"./working/DDPM/models/epoch_300_models.pth"
         train(para)

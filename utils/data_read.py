@@ -16,30 +16,49 @@ from torch.utils.data import Dataset
 from PIL import Image
 import torchvision.transforms as tfs
 
+from enum import Enum
+
+
+# 定义枚举类型
+class OptType(Enum):
+    """
+    定义对读取图像的操作类型
+    """
+    No = 0  # 不处理
+    CROP = 1  # 裁剪
+    RESIZE = 2  # 缩放
+
 
 def is_image_file(filename):
     return any(filename.endswith(extension) for extension in ['.bmp', '.png', '.jpg', '.jpeg', '.PNG', '.JPG', '.JPEG'])
 
 
-class ImageDatasetCropSingle(Dataset):
-    def __init__(self, path, img_H=64, img_W=64, is_Normalize=False, mean=None, std=None, max_count=None):
-        super(ImageDatasetCropSingle, self).__init__()
+class ImageDatasetSingle(Dataset):
+    def __init__(self, image_folder, img_H=64, img_W=64, optType=OptType.No, is_Normalize=False, mean=None, std=None,
+                 max_count=None):
+        super(ImageDatasetSingle, self).__init__()
 
-        crop_trans = [tfs.RandomCrop((img_H, img_W), Image.BICUBIC), tfs.ToTensor()]
+        transforms_temp = [tfs.ToTensor()]
+
+        if optType == OptType.CROP:
+            transforms_temp.append(tfs.RandomCrop((img_H, img_W), Image.BICUBIC))
+        elif optType == OptType.RESIZE:
+            transforms_temp.append(tfs.Resize((img_H, img_W), tfs.InterpolationMode.BICUBIC))
+
         if is_Normalize:
             if std is None:
                 std = [0.229, 0.224, 0.225]
             if mean is None:
                 mean = [0.485, 0.456, 0.406]
-            crop_trans.append(tfs.Normalize(mean, std))
+            transforms_temp.append(tfs.Normalize(mean, std))
 
-        self.crop_transforms = tfs.Compose(crop_trans)
+        self.image_transforms = tfs.Compose(transforms_temp)
 
         self.filePaths = []
-        folders = os.listdir(path)
+        folders = os.listdir(image_folder)
         count = 0
         for f in folders:
-            fp = os.path.join(path, f)
+            fp = os.path.join(image_folder, f)
             if is_image_file(fp):
                 img = Image.open(fp)
                 if img.mode != 'RGB':
@@ -62,134 +81,61 @@ class ImageDatasetCropSingle(Dataset):
             raise ValueError("Image:{} isn't RGB mode.".format(self.filePaths[item]))
         # img, _cb, _cr = img.convert('YCbCr').split() 图像转换
 
-        crop_image = self.crop_transforms(img)
-        return crop_image
+        read_image = self.image_transforms(img)
+        return read_image
 
 
-class ImageDatasetResizeSingle(Dataset):
-    def __init__(self, path, img_H=64, img_W=64, is_Normalize=False, mean=None, std=None, max_count=None):
-
-        super(ImageDatasetResizeSingle, self).__init__()
-
-        trans = [tfs.Resize((img_H, img_W), tfs.InterpolationMode.BICUBIC), tfs.ToTensor()]
-        if is_Normalize:
-            if std is None:
-                std = [0.229, 0.224, 0.225]
-            if mean is None:
-                mean = [0.485, 0.456, 0.406]
-            trans.append(tfs.Normalize(mean, std))
-        self.transforms = tfs.Compose(trans)
-
-        self.filePaths = []
-        folders = os.listdir(path)
-        count = 0
-        for f in folders:
-            fp = os.path.join(path, f)
-            if is_image_file(fp):
-                if max_count is not None:
-                    if count >= max_count:
-                        break
-                self.filePaths.append(fp)
-                count = count + 1
-
-    def __len__(self):
-        return len(self.filePaths)
-
-    def __getitem__(self, item):
-        img = Image.open(self.filePaths[item])
-        if img.mode not in  ['RGB','L']:
-            raise ValueError("Image:{} isn't RGB mode.".format(self.filePaths[item]))
-        # img, _cb, _cr = img.convert('YCbCr').split() 图像转换
-        img = self.transforms(img)
-        return img
-
-
-class ImageDatasetResize(Dataset):
-    def __init__(self, path, img_H=128, img_W=128, is_same_shape=False, scale_factor=4, is_Normalize=False,
+class ImageDatasetSingleToPair(Dataset):
+    def __init__(self, image_folder, img_H=128, img_W=128, optType=OptType.CROP, scale_factor=4, is_same_size=False,
+                 is_Normalize=True,
                  mean=None, std=None, max_count=None):
-
-        super(ImageDatasetResize, self).__init__()
+        """
+        :param image_folder: 图像文件夹
+        :param img_H: 图像高
+        :param img_W: 图像宽
+        :param optType: 默认操作
+        :param scale_factor: 图像缩放尺度
+        :param is_same_size: 缩放后图像是否拉伸到原大小
+        :param is_Normalize: 是否进行归一化
+        :param mean: 归一化均值
+        :param std: 归一化方差
+        :param max_count: 读取文件最大数
+        """
+        super(ImageDatasetSingleToPair, self).__init__()
 
         if std is None:
             std = [0.229, 0.224, 0.225]
         if mean is None:
             mean = [0.485, 0.456, 0.406]
 
-        hr_trans = [tfs.Resize((img_H, img_W), tfs.InterpolationMode.BICUBIC), tfs.ToTensor()]
-        if is_Normalize:
-            hr_trans.append(tfs.Normalize(mean, std))
-        self.hr_transforms = tfs.Compose(hr_trans)
+        self.is_same_size = is_same_size
 
-        lr_trans = [tfs.Resize((img_H // scale_factor, img_W // scale_factor), tfs.InterpolationMode.BICUBIC),
-                    tfs.ToTensor()]
-        if is_Normalize:
-            lr_trans.append(tfs.Normalize(mean, std))
-        self.lr_transforms = tfs.Compose(lr_trans)
+        ref_transforms_temp = [tfs.ToTensor()]
 
-        self.is_same_shape = is_same_shape
-        if is_same_shape:
-            self.data_transform_PIL = tfs.Compose([tfs.ToPILImage()])
+        if optType == OptType.CROP:
+            ref_transforms_temp.append(tfs.RandomCrop((img_H, img_W), Image.BICUBIC))
+        elif optType == OptType.RESIZE:
+            ref_transforms_temp.append(tfs.Resize((img_H, img_W), tfs.InterpolationMode.BICUBIC))
+
+        if is_Normalize:
+            ref_transforms_temp.append(tfs.Normalize(mean, std))
+
+        self.ref_transforms = tfs.Compose(ref_transforms_temp)
+
+        test_transforms_temp = [
+            tfs.Resize((img_H // scale_factor, img_W // scale_factor), tfs.InterpolationMode.BICUBIC)]
+        if is_same_size:
+            test_transforms_temp.append(tfs.Resize((img_H, img_W), tfs.InterpolationMode.BICUBIC))
+        if is_Normalize:
+            test_transforms_temp.append(tfs.Normalize(mean, std))
+
+        self.test_transforms = tfs.Compose(test_transforms_temp)
 
         self.filePaths = []
-        folders = os.listdir(path)
+        folders = os.listdir(image_folder)
         count = 0
         for f in folders:
-            fp = os.path.join(path, f)
-            if is_image_file(fp):
-                if max_count is not None:
-                    if count >= max_count:
-                        break
-                self.filePaths.append(fp)
-                count = count + 1
-
-    def __len__(self):
-        return len(self.filePaths)
-
-    def __getitem__(self, item):
-        img = Image.open(self.filePaths[item])
-        if img.mode != 'RGB':
-            raise ValueError("Image:{} isn't RGB mode.".format(self.filePaths[item]))
-        # img, _cb, _cr = img.convert('YCbCr').split() 图像转换
-        img_lr = self.lr_transforms(img)
-        img_hr = self.hr_transforms(img)
-        if self.is_same_shape:
-            img_lr = self.data_transform_PIL(img_lr)
-            img_lr = self.hr_transforms(img_lr)
-        return {"lr": img_lr, "hr": img_hr}
-
-
-class ImageDatasetCrop(Dataset):
-    def __init__(self, path, img_H=128, img_W=128, is_same_shape=False, scale_factor=4, is_Normalize=True,
-                 mean=None, std=None, max_count=None):
-
-        super(ImageDatasetCrop, self).__init__()
-
-        if std is None:
-            std = [0.229, 0.224, 0.225]
-        if mean is None:
-            mean = [0.485, 0.456, 0.406]
-        self.is_save_shape = is_same_shape
-        self.crop_transforms = tfs.Compose([tfs.RandomCrop((img_H, img_W), Image.BICUBIC)])
-        self.resize_transforms_down = tfs.Compose([tfs.Resize((img_H // scale_factor, img_W // scale_factor),
-                                                              tfs.InterpolationMode.BICUBIC)])
-
-        hr_trans = [tfs.ToTensor()]
-        if is_Normalize:
-            hr_trans.append(tfs.Normalize(mean, std))
-        self.hr_transforms = tfs.Compose(hr_trans)
-
-        lr_trans = [tfs.ToTensor()]
-        if is_same_shape:
-            lr_trans.append(tfs.Resize((img_H, img_W), tfs.InterpolationMode.BICUBIC))
-        if is_Normalize:
-            lr_trans.append(tfs.Normalize(mean, std))
-        self.lr_transforms = tfs.Compose(lr_trans)
-
-        self.filePaths = []
-        folders = os.listdir(path)
-        count = 0
-        for f in folders:
-            fp = os.path.join(path, f)
+            fp = os.path.join(image_folder, f)
             if is_image_file(fp):
                 img = Image.open(fp)
                 if img.mode != 'RGB':
@@ -212,26 +158,25 @@ class ImageDatasetCrop(Dataset):
             raise ValueError("Image:{} isn't RGB mode.".format(self.filePaths[item]))
         # img, _cb, _cr = img.convert('YCbCr').split() 图像转换
 
-        crop_image = self.crop_transforms(img)
-        image_down = self.resize_transforms_down(crop_image)
-        img_hr = self.hr_transforms(crop_image)
-        img_lr = self.lr_transforms(image_down)
-        return {"lr": img_lr, "hr": img_hr}
+        img_ref = self.ref_transforms(img)
+        img_test = self.test_transforms(img_ref)
+
+        return {"ref": img_ref, "test": img_test}
 
 
 class ImageDatasetPair(Dataset):
-    '''
-    # 读取成对图片, 参考图像和待处理图像
-    # 直接读取，不对图像进行裁剪，缩放
-    '''
-    def __init__(self, path_folder_def, path_folder_test,
-                 is_Normalize=False, mean=None, std=None, max_count=None):
+    """
+        读取2幅成对图片，不做裁剪处理
+    """
+
+    def __init__(self, path_folder_def, path_folder_test, is_Normalize=False, mean=None, std=None, max_count=None):
         super(ImageDatasetPair, self).__init__()
 
         if std is None:
             std = [0.229, 0.224, 0.225]
         if mean is None:
             mean = [0.485, 0.456, 0.406]
+
         self.transforms_Tensor = tfs.Compose([tfs.ToTensor()])
         self.is_Normalize = is_Normalize
         if self.is_Normalize:
@@ -269,4 +214,4 @@ class ImageDatasetPair(Dataset):
 
 if __name__ == '__main__':
     dataset = ImageDatasetPair(r"D:\project\Pycharm\DeepLearning\data\coco125\high",
-                                  r"D:\project\Pycharm\DeepLearning\data\coco125\low", is_Normalize=True)
+                               r"D:\project\Pycharm\DeepLearning\data\coco125\low", is_Normalize=True)

@@ -41,6 +41,7 @@ class UNetConfig:
         self.num_classes = None if not False else 10
         self.initial_pad = 0
 
+
 def train(opt):
     save_folder_image = os.path.join(opt.save_folder, r"ColorSARDiff/images")
     save_folder_model = os.path.join(opt.save_folder, r"ColorSARDiff/models")
@@ -93,15 +94,9 @@ def train(opt):
 
     n_epochs = opt.epochs
 
-    # 读取用去显示图像保存
-    show_data1 = dataset[0]
-    show_data2 = dataset[1]
-    show_data3 = dataset[2]
-    show_data4 = dataset[3]
-    show_image_optical = torch.stack([show_data1["def"], show_data2["def"], show_data3["def"], show_data4["def"]],
-                                     0).to(device)
-    show_image_sar = torch.stack([show_data1["test"], show_data2["test"], show_data3["test"], show_data4["test"]],
-                                 0).to(device)
+    # 读取显示图像
+    show_image_optical = torch.stack([dataset[i]["def"] for i in range(0, opt.batch_size)], 0).to(device)
+    show_image_sar = torch.stack([dataset[i]["test"] for i in range(0, opt.batch_size)], 0).to(device)
 
     for epoch in range(trained_epoch + 1, trained_epoch + n_epochs + 1):
         # Training
@@ -124,7 +119,7 @@ def train(opt):
         # Save models and images
         if epoch % opt.save_epoch_rate == 0 or (epoch == (trained_epoch + n_epochs)):
             diffusion.eval()
-            samples = diffusion.sample(batch_size=opt.batch_size, device=device,  noise=show_image_sar)
+            samples = diffusion.sample(batch_size=opt.batch_size, device=device, noise=show_image_sar)
 
             img_sar = make_grid(show_image_sar, nrow=1, normalize=True).to(device)
             img_optical = make_grid(show_image_optical, nrow=1, normalize=True).to(device)
@@ -137,7 +132,6 @@ def train(opt):
 
 
 def run(opt):
-
     save_folder_image = os.path.join(opt.save_folder, r"ColorSARDiff/results")
     os.makedirs(save_folder_image, exist_ok=True)
 
@@ -215,9 +209,9 @@ if __name__ == '__main__':
 
     is_train = True
     if is_train:
-        para.epochs = 2
+        para.epochs = 10
         para.save_epoch_rate = 2
-        para.load_models = True
+        para.load_models = False
         para.load_models_checkpoint = r"./working/ColorSARDiff/models/epoch_1_models.pth"
         train(para)
     else:

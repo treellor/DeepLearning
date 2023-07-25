@@ -10,21 +10,8 @@
        Author:
        Modification:
      2.…………
-     # Configure data loader
-os.makedirs("../../data/mnist", exist_ok=True)
-dataloader = torch.utils.data.DataLoader(
-    datasets.MNIST(
-        "../../data/mnist",
-        train=True,
-        download=True,
-        transform=transforms.Compose(
-            [transforms.Resize(opt.img_size), transforms.ToTensor(), transforms.Normalize([0.5], [0.5])]
-        ),
-    ),
-    batch_size=opt.batch_size,
-    shuffle=True,
-)
 """
+
 import os
 import numpy as np
 import argparse
@@ -36,7 +23,7 @@ from torchvision.utils import save_image
 from tqdm import tqdm
 
 from GAN_models import Generator, Discriminator
-from utils.data_read import ImageDatasetResizeSingle
+from utils.data_read import ImageDatasetSingle
 from utils.utils import load_model, save_model
 
 
@@ -46,7 +33,7 @@ def train(opt):
     os.makedirs(save_folder_image, exist_ok=True)
     os.makedirs(save_folder_model, exist_ok=True)
 
-    dataset_train = ImageDatasetResizeSingle(opt.data_folder, img_H=opt.img_h, img_W=opt.img_w)
+    dataset_train = ImageDatasetSingle(opt.data_folder, img_H=opt.img_h, img_W=opt.img_w)
     dataloader_train = DataLoader(dataset=dataset_train, num_workers=0, batch_size=opt.batch_size, shuffle=True)
 
     img_shape = (opt.img_channels, opt.img_h, opt.img_w)
@@ -71,9 +58,8 @@ def train(opt):
     adversarial_loss = torch.nn.BCELoss().to(device)
 
     n_epochs = opt.epochs
-    save_epoch = opt.save_epoch.union({n_epochs + trained_epoch})
 
-    for epoch in range(trained_epoch, trained_epoch + n_epochs):
+    for epoch in range(trained_epoch+1, trained_epoch + n_epochs+1):
         # Training
         generator.train()
         discriminator.train()
@@ -117,17 +103,17 @@ def train(opt):
             optimizer_D.step()
 
             # Save image
-            if epoch + 1 in save_epoch:
+            if epoch % opt.save_epoch_rate == 0 or (epoch == (trained_epoch + n_epochs)):
                 if batch_idx == 0:
-                    current_epoch = epoch + 1
+
                     save_image(img_gen.data[:opt.batch_size],
-                               os.path.join(save_folder_image, f"epoch_{current_epoch}.png"),
+                               os.path.join(save_folder_image, f"epoch_{epoch}.png"),
                                nrow=8, normalize=False)
                     # Save model checkpoints
-                    save_model(os.path.join(save_folder_model, f"epoch_{current_epoch}_generator.pth"),
-                               generator, optimizer_G, current_epoch)
-                    save_model(os.path.join(save_folder_model, f"epoch_{current_epoch}_discriminator.pth"),
-                               discriminator, optimizer_D, current_epoch)
+                    save_model(os.path.join(save_folder_model, f"epoch_{epoch}_generator.pth"),
+                               generator, optimizer_G, epoch)
+                    save_model(os.path.join(save_folder_model, f"epoch_{epoch}_discriminator.pth"),
+                               discriminator, optimizer_D, epoch)
 
 
 def run(opt):
@@ -146,7 +132,7 @@ def run(opt):
     load_model(opt.load_models_path_gen, generator, optimizer_G)
 
     generator.eval()
-    img_n = 200
+    img_n = para.batch_size
     z = Variable(Tensor(np.random.normal(0, 1, (img_n, opt.seq_length))))
     img_gen = generator(z)
     save_image(img_gen.data[:img_n], os.path.join(save_folder_image, f"results.png"), nrow=10, normalize=False)
@@ -180,33 +166,25 @@ def parse_args():
 
 if __name__ == '__main__':
 
-    is_train = True
-    if is_train:
-        para = parse_args()
-        para.data_folder = '../data/sanguo7'
-        para.seq_length = 128
-        para.img_channels = 3
-        para.img_w = 96
-        para.img_h = 120
-        para.epochs = 200
-        para.batch_size = 16
+    para = parse_args()
+    para.data_folder = '../data/sanguo7'
+    para.seq_length = 128
+    para.img_channels = 3
+    para.img_w = 96
+    para.img_h = 120
+    para.batch_size = 20
 
-        # para.save_epoch = set(range(1, 100, 10))
+
+    is_train = False
+    if is_train:
+        para.epochs = 10
+        para.save_epoch_rate = 5
         para.load_models = True
-        para.load_models_path_gen = r"./working/GAN/models/epoch_100_generator.pth"
-        para.load_models_path_dis = r"./working/GAN/models/epoch_100_discriminator.pth"
+        para.load_models_path_gen = r"./working/GAN/models/epoch_10_generator.pth"
+        para.load_models_path_dis = r"./working/GAN/models/epoch_10_discriminator.pth"
         train(para)
     else:
-        para = parse_args()
-        para.data_folder = '../data/face'
-        para.seq_length = 128
-        para.img_channels = 3
-        para.img_w = 24
-        para.img_h = 32
-        para.batch_size = 64
-
-        # para.save_epoch = set(range(1, 100, 10))
         para.load_models = True
-        para.load_models_path_gen = r"./working/GAN/models/epoch_200_generator.pth"
-        para.load_models_path_dis = r"./working/GAN/models/epoch_200_discriminator.pth"
+        para.load_models_path_gen = r"./working/GAN/models/epoch_20_generator.pth"
+        para.load_models_path_dis = r"./working/GAN/models/epoch_20_discriminator.pth"
         run(para)
