@@ -71,22 +71,24 @@ class GaussianDiffusion(nn.Module):
         self.register_buffer("sigma", to_torch(np.sqrt(betas)))
 
     @torch.no_grad()
-    def remove_noise(self, x, t, y):
+    def remove_noise(self, x, t,  class_index,  cond_image ):
 
-        return ((x - extract(self.remove_noise_coeff, t, x.shape) * self.model(x, t, y)) *
+        return ((x - extract(self.remove_noise_coeff, t, x.shape) * self.model(x, t, class_index=class_index, cond_image=cond_image)) *
                 extract(self.reciprocal_sqrt_alphas, t, x.shape)
                 )
 
     @torch.no_grad()
-    def sample(self, batch_size, device, y=None):
-        if y is not None and batch_size != len(y):
-            raise ValueError("sample batch size different from length of given y")
+    def sample(self, batch_size, device, class_index=None, cond_image=None):
+        if class_index is not None and batch_size != len(class_index):
+            raise ValueError("sample batch size different from length of given class_index")
+        if cond_image is not None and batch_size != len(cond_image):
+            raise ValueError("sample batch size different from length of given cond_image")
 
         x = torch.randn(batch_size, self.img_channels, *self.img_size, device=device)
 
         for t in tqdm(range(self.timesteps - 1, -1, -1), desc=f'sample times', total=self.timesteps):
             t_batch = torch.tensor([t], device=device).repeat(batch_size)
-            x = self.remove_noise(x, t_batch, y)
+            x = self.remove_noise(x, t_batch, class_index,cond_image )
 
             if t > 0:
                 x += extract(self.sigma, t_batch, x.shape) * torch.randn_like(x)
@@ -94,16 +96,18 @@ class GaussianDiffusion(nn.Module):
         return x.cpu().detach()
 
     @torch.no_grad()
-    def sample_diffusion_sequence(self, batch_size, device, y=None):
-        if y is not None and batch_size != len(y):
-            raise ValueError("sample batch size different from length of given y")
+    def sample_diffusion_sequence(self, batch_size, device, class_index=None,cond_image=None ):
+        if class_index is not None and batch_size != len(class_index):
+            raise ValueError("sample batch size different from length of given class_index")
+        if cond_image is not None and batch_size != len(cond_image):
+            raise ValueError("sample batch size different from length of given cond_image")
 
         x = torch.randn(batch_size, self.img_channels, *self.img_size, device=device)
         diffusion_sequence = [x.cpu().detach()]
 
         for t in range(self.num_timesteps - 1, -1, -1):
             t_batch = torch.tensor([t], device=device).repeat(batch_size)
-            x = self.remove_noise(x, t_batch, y)
+            x = self.remove_noise(x, t_batch, class_index,cond_image )
 
             if t > 0:
                 x += extract(self.sigma, t_batch, x.shape) * torch.randn_like(x)
@@ -118,12 +122,12 @@ class GaussianDiffusion(nn.Module):
                 extract(self.sqrt_one_minus_alphas_cumprod, t, x.shape) * noise
         )
 
-    def get_losses(self, x, t, y):
+    def get_losses(self, x, t, class_index=None, cond_image=None):
 
         noise = torch.randn_like(x)
 
         perturbed_x = self.perturb_x(x, t, noise)
-        estimated_noise = self.model(perturbed_x, t, y)
+        estimated_noise = self.model(perturbed_x, t, class_index, cond_image )
 
         if self.loss_type == "l1":
             loss = F.l1_loss(estimated_noise, noise)
@@ -132,7 +136,7 @@ class GaussianDiffusion(nn.Module):
 
         return loss
 
-    def forward(self, x, y=None):
+    def forward(self, x, class_index=None, cond_image=None):
         b, c, h, w = x.shape
         device = x.device
 
@@ -142,7 +146,7 @@ class GaussianDiffusion(nn.Module):
             raise ValueError("image width does not match diffusion parameters")
 
         t = torch.randint(0, self.timesteps, (b,), device=device)
-        return self.get_losses(x, t, y)
+        return self.get_losses(x, t, class_index,cond_image)
 
 
 def extract(a, t, x_shape):

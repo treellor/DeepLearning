@@ -23,19 +23,7 @@ from utils.data_read import ImageDatasetSingle
 from utils.utils import load_model, save_model
 from utils.common import EMA
 from models.DDPM_models import GaussianDiffusion
-from backbone.unet import UNet
-
-class UNetConfig:
-    def __init__(self):
-        # self.use_labels = False
-        self.base_channels = 128
-        self.channel_mults = (1, 2, 2, 2)
-        self.num_res_blocks = 2
-        self.dropout = 0.1
-        self.attention_resolutions = (1,)
-        self.time_emb_dim = 128 * 4
-        self.num_classes = None if not False else 10
-        self.initial_pad = 0
+from backbone.unet import UNet,UNetConfig
 
 
 def train(opt):
@@ -53,17 +41,9 @@ def train(opt):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     # Tensor = torch.cuda.FloatTensor if torch.cuda.is_available() else torch.Tensor
 
-    config = UNetConfig()
+    # config = UNetConfig()
 
-    model = UNet(img_channels=opt.img_channels,
-                 base_channels=config.base_channels,
-                 channel_mults=config.channel_mults,
-                 time_emb_dim=config.time_emb_dim,
-                 dropout=config.dropout,
-                 attention_resolutions=config.attention_resolutions,
-                 num_classes=None,  # if not args.use_labels else 10,
-                 initial_pad=0,
-                 )
+    model = UNet(img_channels=opt.img_channels,   time_emb_dim= opt.timesteps )
     ema = EMA(model, device)
 
     diffusion = GaussianDiffusion(model, opt.img_channels, (opt.img_h, opt.img_w), timesteps=opt.timesteps,
@@ -156,22 +136,22 @@ if __name__ == '__main__':
 
     para = parse_args()
     para.save_folder = r"./working/"
-    #para.data_folder = '../data/face'
-    para.data_folder = '../data/SAR128/optical'
-    para.timesteps = 100
+    para.data_folder = '../data/face'
+    #para.data_folder = '../data/SAR128/optical'
+    para.timesteps = 200
     para.seq_length = 256
     para.img_channels = 3
-    para.img_w = 128
-    para.img_h = 128
-    para.batch_size = 4
+    para.img_w = 24
+    para.img_h = 32
+    para.batch_size = 50
 
     is_train = True
 
     if is_train:
-        para.epochs = 10
-        para.save_epoch_rate = 2
-        para.load_models = False
-        para.load_models_checkpoint = r"./working/DDPM/models/epoch_300_models.pth"
+        para.epochs = 200
+        para.save_epoch_rate = 50
+        para.load_models = True
+        para.load_models_checkpoint = r"./working/DDPM/models/epoch_600_models.pth"
         train(para)
     else:
         # para.save_epoch = set(range(1, 100, 10))
