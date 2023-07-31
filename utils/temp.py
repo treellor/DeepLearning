@@ -29,6 +29,6 @@ def convert_to_grayscale(input_folder, output_folder):
 
 if __name__ == "__main__":
     input_folder = r"D:\project\Pycharm\DeepLearning\data\face"  # 替换为您的输入文件夹路径
-    output_folder = r"D:\project\Pycharm\DeepLearning\data\face2"  # 替换为您的输出文件夹路径
+    output_folder = r"D:\project\Pycharm\DeepLearning\data\gray"  # 替换为您的输出文件夹路径
 
     convert_to_grayscale(input_folder, output_folder)
