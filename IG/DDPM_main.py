@@ -18,12 +18,12 @@ from tqdm import tqdm
 import torch
 from torch.utils.data import DataLoader
 from torchvision.utils import save_image
-
+from matplotlib import pyplot as plt
 from utils.data_read import ImageDatasetSingle
-from utils.utils import load_model, save_model
+from utils.utils import load_model, save_model, AverageMeter, image_show
 from utils.common import EMA
-from models.DDPM_models import GaussianDiffusion
-from backbone.unet import UNet,UNetConfig
+from models.DDPM_models import GaussianDiffusion, LossType
+from backbone.unet import UNet, UNetConfig
 
 
 def train(opt):
@@ -39,16 +39,17 @@ def train(opt):
 
     # Initialize generator and discriminator
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    # Tensor = torch.cuda.FloatTensor if torch.cuda.is_available() else torch.Tensor
 
-    # config = UNetConfig()
+    model = UNet(img_channels=opt.img_channels, time_emb_dim=opt.timesteps, channel_mults=(1, 2, 4, 4),  attention_layers=(1,) )
 
-    model = UNet(img_channels=opt.img_channels,   time_emb_dim= opt.timesteps )
     ema = EMA(model, device)
 
+    loss_type = LossType()
+    loss_type.L1 = True
+    loss_type.L2 = True
+    loss_type.SSIM = True
     diffusion = GaussianDiffusion(model, opt.img_channels, (opt.img_h, opt.img_w), timesteps=opt.timesteps,
-                                  loss_type="l2").to(device)
-
+                                  loss_type=loss_type).to(device)
     optimizer = torch.optim.Adam(diffusion.parameters(), lr=opt.lr)
 
     # Load pretrained models
@@ -56,26 +57,37 @@ def train(opt):
     if opt.load_models:
         trained_epoch = load_model(opt.load_models_checkpoint, diffusion, optimizer)
 
-    # Losses
-    # adversarial_loss = torch.nn.BCELoss().to(device)
-
     n_epochs = opt.epochs
 
-    for epoch in range(trained_epoch + 1, trained_epoch + n_epochs + 1):
+    train_loss1, train_loss2, train_loss_ssim = [], [], []
+    for epoch in tqdm(range(trained_epoch + 1, trained_epoch + n_epochs + 1), desc=f'Training Epoch',total=n_epochs):
         # Training
         diffusion.train()
-        for batch_idx, imgs in tqdm(enumerate(dataloader_train), desc=f'Training Epoch {epoch}',
-                                    total=int(len(dataloader_train))):
+        epoch_train_loss1 = AverageMeter()
+        epoch_train_loss2 = AverageMeter()
+        epoch_train_loss_ssim = AverageMeter()
+        # for batch_idx, imgs in tqdm(enumerate(dataloader_train), desc=f'Training Epoch {epoch}',
+        #                             total=int(len(dataloader_train))):
+        for batch_idx, imgs in enumerate(dataloader_train):
             x = imgs.to(device)
 
             optimizer.zero_grad()
-            loss = diffusion(x)
+            loss1, loss2, loss_ssim = diffusion(x)
+
+            loss = loss1 + loss2 + (1 - loss_ssim)
+            epoch_train_loss1.update(loss1.item(), len(x))
+            epoch_train_loss2.update(loss2.item(), len(x))
+            epoch_train_loss_ssim.update(loss_ssim.item(), len(x))
+
             loss.backward()
             optimizer.step()
             # acc_train_loss += loss.item()
             # diffusion.update_ema()
             ema.update_ema(diffusion.model)
 
+        train_loss1.append(epoch_train_loss1.avg)
+        train_loss2.append(epoch_train_loss2.avg)
+        train_loss_ssim.append(epoch_train_loss_ssim.avg)
         # Save models and images
         if (epoch % opt.save_epoch_rate) == 0 or (epoch == (trained_epoch + n_epochs)):
             diffusion.eval()
@@ -84,26 +96,26 @@ def train(opt):
                        os.path.join(save_folder_image, f"epoch_{epoch}_result.png"), nrow=10, normalize=False)
             save_model(os.path.join(save_folder_model, f"epoch_{epoch}_models.pth"), diffusion, optimizer, epoch)
 
+    plt.figure(figsize=(10, 7))
+    plt.plot(train_loss1, color='green', label='train loss1')
+    plt.plot(train_loss2, color='red', label='train loss2')
+    plt.plot(train_loss_ssim, color='blue', label='train loss ssim')
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss')
+    plt.legend()
+    plt.savefig(os.path.join(save_folder_image, f"loss{trained_epoch + n_epochs}.png"))
+    plt.show()
+
 
 def run(opt):
     save_folder_image = os.path.join(opt.save_folder, r"DDPM/results")
     os.makedirs(save_folder_image, exist_ok=True)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    config = UNetConfig()
     # 添加
-    model = UNet(img_channels=opt.img_channels,
-                 base_channels=config.base_channels,
-                 channel_mults=config.channel_mults,
-                 time_emb_dim=config.time_emb_dim,
-                 dropout=config.dropout,
-                 attention_resolutions=config.attention_resolutions,
-                 num_classes=None,  # if not args.use_labels else 10,
-                 initial_pad=0,
-                 )
+    model = UNet(img_channels=opt.img_channels, time_emb_dim=opt.timesteps, channel_mults=(1, 2, 4, 4),attention_layers=(1,))
 
-    diffusion = GaussianDiffusion(model, opt.img_channels, (opt.img_h, opt.img_w), timesteps=opt.timesteps,
-                                  loss_type="l2").to(device)
+    diffusion = GaussianDiffusion(model, opt.img_channels, (opt.img_h, opt.img_w), timesteps=opt.timesteps).to(device)
     load_model(opt.load_models_checkpoint, diffusion)
 
     samples = diffusion.sample(batch_size=opt.batch_size, device=device)
@@ -121,6 +133,7 @@ def parse_args():
     parser.add_argument("--lr", type=float, default=0.0002, help="adam: learning rate")
     parser.add_argument("--b1", type=float, default=0.5, help="adam: decay of first order momentum of gradient")
     parser.add_argument("--b2", type=float, default=0.999, help="adam: decay of first order momentum of gradient")
+    parser.add_argument("--save_image_count", type=int, default=5, help="保存图像个数")
     parser.add_argument("--timesteps", type=int, default=1000, help="迭代次数")
     parser.add_argument('--epochs', type=int, default=5, help='total training epochs')
     parser.add_argument('--save_epoch_rate', type=int, default=100, help='How many epochs save once')
@@ -136,25 +149,24 @@ if __name__ == '__main__':
 
     para = parse_args()
     para.save_folder = r"./working/"
-    para.data_folder = '../data/face'
-    #para.data_folder = '../data/SAR128/optical'
+    para.data_folder = r'../data/face/color'
+    # para.data_folder = '../data/SAR128/optical'
     para.timesteps = 200
     para.seq_length = 256
     para.img_channels = 3
     para.img_w = 24
     para.img_h = 32
-    para.batch_size = 50
+    para.batch_size = 100
 
     is_train = True
 
     if is_train:
         para.epochs = 200
         para.save_epoch_rate = 50
-        para.load_models = True
-        para.load_models_checkpoint = r"./working/DDPM/models/epoch_600_models.pth"
+        para.load_models = False
+        para.load_models_checkpoint = r"./working/DDPM/models/epoch_1000_models.pth"
         train(para)
     else:
-        # para.save_epoch = set(range(1, 100, 10))
         para.load_models = True
         para.load_models_checkpoint = r"./working/DDPM/models/epoch_50_models.pth"
         run(para)

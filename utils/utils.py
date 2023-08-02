@@ -20,7 +20,6 @@ from torchvision.utils import make_grid
 from matplotlib import pyplot as plt
 
 
-
 class AverageMeter(object):
     def __init__(self):
         self.count = 0

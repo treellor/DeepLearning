@@ -2,6 +2,7 @@ from PIL import Image
 import os
 
 
+
 def convert_to_grayscale(input_folder, output_folder):
     # 检查输出文件夹是否存在，若不存在则创建
     if not os.path.exists(output_folder):

@@ -246,7 +246,7 @@ class UNet(nn.Module):
     def __init__(
             self,
             img_channels,
-            base_channels=32,
+            base_channels=128,
             is_cond_image=False,
             channel_mults=(1, 2, 4, 8),
             num_res_blocks=2,
@@ -417,7 +417,7 @@ class UNet(nn.Module):
 
 class UNetConfig:
     def __init__(self):
-        self.base_channels = 32  # Unet网络中第一次卷积操作的输入通道数
+        self.base_channels = 128  # Unet网络中第一次卷积操作的输入通道数
         self.is_cond_image=False  # 是否输入控制图像，图像超分等需要
         self.channel_mults = (1, 2, 4, 8)  # Unet网络各层通道数相对于base_channels的倍数
         self.num_res_blocks = 2  # Unet网络中每个下采样/上采样块中的残差块个数
