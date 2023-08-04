@@ -149,20 +149,19 @@ if __name__ == '__main__':
 
     para = parse_args()
     para.save_folder = r"./working/"
-    para.data_folder = r'../data/face/color'
+    para.data_folder = r'../data/flag128'
     # para.data_folder = '../data/SAR128/optical'
-    para.timesteps = 200
-    para.seq_length = 256
+    para.timesteps = 100
     para.img_channels = 3
-    para.img_w = 24
-    para.img_h = 32
-    para.batch_size = 100
+    para.img_w = 128
+    para.img_h = 128
+    para.batch_size = 1
 
     is_train = True
 
     if is_train:
-        para.epochs = 200
-        para.save_epoch_rate = 50
+        para.epochs = 10
+        para.save_epoch_rate = 2
         para.load_models = False
         para.load_models_checkpoint = r"./working/DDPM/models/epoch_1000_models.pth"
         train(para)

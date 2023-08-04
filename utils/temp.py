@@ -1,35 +1,29 @@
-from PIL import Image
 import os
+from PIL import Image
 
+# 输入文件夹和输出文件夹的路径
+input_folder = r"D:\project\Pycharm\DeepLearning\data\flag"
+output_folder = r"D:\project\Pycharm\DeepLearning\data\flag128"
 
+# 创建输出文件夹
+os.makedirs(output_folder, exist_ok=True)
 
-def convert_to_grayscale(input_folder, output_folder):
-    # 检查输出文件夹是否存在，若不存在则创建
-    if not os.path.exists(output_folder):
-        os.makedirs(output_folder)
-
-    # 遍历输入文件夹中的所有文件
-    for filename in os.listdir(input_folder):
+# 遍历输入文件夹中的所有图像文件
+for filename in os.listdir(input_folder):
+    if filename.endswith(".jpg") or filename.endswith(".png"):  # 只处理jpg和png格式的图像
         input_path = os.path.join(input_folder, filename)
+        output_path = os.path.join(output_folder, filename)
 
-        # 检查文件是否为图片
-        if not os.path.isfile(input_path) or not filename.lower().endswith(('.png', '.jpg', '.jpeg', '.gif')):
-            continue
+        # 读取图像
+        image = Image.open(input_path)
 
-        # 打开图片并转换为黑白
-        with Image.open(input_path) as img:
-            grayscale_img = img.convert('L').convert('RGB')  # 将图片转换为黑白，'L'表示灰度图像
+        # 缩放图像到原来的一半大小
+        width, height = image.size
+        new_width = width // 4
+        new_height = height // 4
+        scaled_image = image.resize((new_width, new_height))
 
-            # 构建输出路径
-            output_filename = os.path.splitext(filename)[0] + '.jpg'
-            output_path = os.path.join(output_folder, output_filename)
+        # 保存缩放后的图像
+        scaled_image.save(output_path)
 
-            # 保存黑白图片到输出文件夹
-            grayscale_img.save(output_path)
-
-
-if __name__ == "__main__":
-    input_folder = r"D:\project\Pycharm\DeepLearning\data\face"  # 替换为您的输入文件夹路径
-    output_folder = r"D:\project\Pycharm\DeepLearning\data\gray"  # 替换为您的输出文件夹路径
-
-    convert_to_grayscale(input_folder, output_folder)
+print("图像缩放并保存完成！")

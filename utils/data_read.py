@@ -209,7 +209,7 @@ class ImageDatasetPair(Dataset):
         if self.is_Normalize:
             image_def = self.transforms_Normalize(image_def)
             image_test = self.transforms_Normalize(image_test)
-        return {"def": image_def, "test": image_test}
+        return {"ref": image_def, "test": image_test}
 
 
 if __name__ == '__main__':
